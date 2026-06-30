@@ -4,7 +4,7 @@ This document tracks per-module completion across sessions. **First thing to rea
 
 Status legend: ✅ done · 🟡 in progress · ⬜ not started · 🔒 blocked
 
-> **Current state:** Foundation + auth + workers + CI + Dockerfiles. Ready to build feature pages and admin/billing.
+> **Current state:** Auth → projects → uploads → editor MVP → billing all wired end-to-end. Repo is runnable.
 
 ## Roadmap
 
@@ -12,114 +12,156 @@ Status legend: ✅ done · 🟡 in progress · ⬜ not started · 🔒 blocked
 | Module | Status | Notes |
 | --- | --- | --- |
 | Monorepo skeleton | ✅ | pnpm workspaces + Turborepo |
-| Top-level docs | ✅ | README, ARCHITECTURE, CONTRIBUTING, SECURITY, LICENSE, CODEOWNERS |
+| Top-level docs | ✅ | README, ARCHITECTURE, CONTRIBUTING, SECURITY |
 | `.env.example` | ✅ | Every subsystem documented |
-| Shared config package (`@vrs/config`) | ✅ | ESLint + TS + Tailwind presets |
-| Shared types package (`@vrs/types`) | ✅ | Zod schemas: common/api/auth/users/projects/clips/assets/transcripts/voices/jobs/exports/templates/billing/admin/notifications |
-| Database schema (Prisma) | ✅ | ~35 models; full enum coverage; indexed |
-| Seed data | ✅ | Plans, stock voices, templates, dev admin |
-| Prisma client + helpers | ✅ | Transactional helper, cursor pagination, tryFind |
-| `docker-compose.yml` | ✅ | postgres / redis / minio / rabbitmq / mailhog + init scripts |
-| UI package (`@vrs/ui`) | ✅ | Tokens, Button, Input, Card, Spinner, Badge, Toast |
-| API service skeleton | ✅ | Server boots; env-validated; structured logging |
-| Web app skeleton | ✅ | Next.js 14 App Router, design system wired, route groups |
-| Workers service | ✅ | Celery + FastAPI; 8 tasks registered with real provider routing |
-| CI workflow (`.github/workflows/ci.yml`) | ✅ | Lint, typecheck, test, build, image push to GHCR, Trivy scan |
-| Production Dockerfiles | ✅ | api / web (standalone) / workers (ffmpeg + yt-dlp) |
+| Shared config / types / ui / db | ✅ | 4 packages, all consumed by apps |
+| Shared SDK (`@vrs/sdk`) | ✅ | Typed client used by web for every endpoint |
+| Database schema (Prisma) | ✅ | ~35 models, indexed |
+| Seed (plans, voices, templates) | ✅ | |
+| Docker Compose dev infra | ✅ | postgres / redis / minio / rabbitmq / mailhog |
+| API skeleton | ✅ | Fastify, plugins, swagger, ws |
+| Web app skeleton | ✅ | Next.js 14 App Router + design system |
+| Workers (Celery + FastAPI) | ✅ | 8 tasks registered, real provider routing |
+| CI workflow + Dockerfiles | ✅ | Lint/typecheck/test/build/Trivy + 3 prod Dockerfiles |
 | Terraform skeleton | ⬜ | Phase 9 work |
 
 ### Phase 1 — Auth & users
 | Module | Status | Notes |
 | --- | --- | --- |
-| OTP request + verify endpoints | ✅ | `/v1/auth/otp/{request,verify}` |
-| JWT access/refresh tokens, rotation, revocation | ✅ | Argon2id-hashed OTP; opaque rotated refresh tokens |
-| Session middleware (Fastify) | ✅ | `requireAuth`, `requireAdmin`, `requireInternal` |
-| Email delivery | ✅ | SMTP / SendGrid / SES switchable; original templates |
-| Rate limiting on auth endpoints | ✅ | Per-route override |
-| Sign-in page | ✅ | `(auth)/signin` with `react-hook-form` + zod resolver |
-| Verify-OTP page | ✅ | 6-digit input, resend cooldown, paste handler |
-| App shell + dashboard | ✅ | `(app)/layout.tsx` + `(app)/dashboard/page.tsx` |
-| Profile + settings UI | ⬜ | Next session |
-| Audit log writes for auth events | ⬜ | |
-| OAuth (Google) | ⬜ | Schema already supports it |
+| OTP request + verify | ✅ | `/v1/auth/otp/{request,verify}` |
+| JWT + opaque refresh, rotation | ✅ | |
+| Session middleware | ✅ | `requireAuth`, `requireAdmin`, `requireInternal` |
+| Sign-in / verify pages | ✅ | |
+| Dashboard | ✅ | Stats + onboarding + template picker |
+| Profile form (UI) | ✅ | Saves locally; `PATCH /v1/users/me` endpoint pending |
+| Audit log writes | ⬜ | |
+| OAuth (Google) | ⬜ | |
 
 ### Phase 2 — Projects & assets
 | Module | Status | Notes |
 | --- | --- | --- |
-| Project CRUD endpoints | ⬜ | Types ready in `@vrs/types/projects` |
-| Presigned-upload flow | ⬜ | Types ready in `@vrs/types/assets` |
-| URL import endpoint (worker side) | ✅ | `vrs.import.url` task; yt-dlp wrapped |
-| Projects list page (with search/filter) | ⬜ | |
-| New-project wizard | ⬜ | |
-| Templates catalog + page | ⬜ | DB seeded, page pending |
+| Project CRUD (`POST/GET/PATCH/DELETE /v1/projects`, `/duplicate`) | ✅ | with usage quota enforcement |
+| Presigned upload (`POST /v1/uploads/init`, `/complete`) | ✅ | direct PUT to S3 |
+| URL import (`POST /v1/uploads/import`) | ✅ | enqueues worker job |
+| Asset CRUD (`GET /v1/assets`, `GET /v1/assets/:id`) | ✅ | presigned URLs on read |
+| Internal callback routes | ✅ | `PATCH /v1/internal/jobs/:id`, `GET /v1/internal/projects/:id/timeline`, finished-handlers for assets/transcripts/voiceovers/exports |
+| Projects list page | ✅ | Search, status badges, paginated |
+| New-project wizard | ✅ | Upload / URL / Script flows; template flow routes to `/templates` |
+| Templates page | ✅ | Categories tab bar; clicking creates a project |
 
-### Phase 3 — Editor (timeline)
-*(unchanged — all ⬜)*
+### Phase 3 — Editor MVP
+| Module | Status | Notes |
+| --- | --- | --- |
+| Timeline state store (zustand) | ✅ | clips, tracks, zoom, playhead, dirty flag |
+| Timeline lane component | ✅ | drag/move/trim, scene cuts via 'B' key, delete |
+| Preview pane | ✅ | HTML5 video, sync to playhead, fullscreen, mute, caption overlay |
+| Sidebar tools | ✅ | Media uploader, URL import, generate captions/highlights/voice/script/image |
+| Toolbar | ✅ | Save, export, undo/redo, zoom in/out |
+| Editor server page | ✅ | `/projects/[id]` loads project + renders shell |
+| Keyboard shortcuts | ✅ | Space / B / Delete / arrows / +/- |
+| Clip mutation REST endpoints | ⬜ | Next session — persist timeline changes |
+| Undo/redo (command log) | ⬜ | |
+| Multi-track + split-screen layouts | ⬜ | |
 
 ### Phase 4 — AI features
 | Module | Status | Notes |
 | --- | --- | --- |
-| Highlight detection worker | ✅ | FFmpeg audio energy + scene cuts; ranked windows |
-| Whisper-based transcription | ✅ | OpenAI / faster-whisper / Deepgram providers |
-| Caption editor + SRT export | 🟡 | Worker emits SRT/VTT; UI pending |
-| TTS voiceover (ElevenLabs / Polly / Azure) | ✅ | Provider-switchable via env |
-| Voice cloning | ⬜ | Endpoint + worker pending |
-| Script generation + rewrite (LLM) | ✅ | Anthropic + OpenAI adapters |
-| Image generation (Stability / Replicate) | ✅ | |
-| Video generation | ⬜ | Provider stubs in `apps/workers/src/vrs_workers/tasks/video_gen.py` next session |
+| Highlights worker | ✅ | FFmpeg energy + scene cuts |
+| Transcription worker | ✅ | OpenAI Whisper / faster-whisper / Deepgram |
+| TTS worker | ✅ | ElevenLabs / Polly |
+| Script generate + rewrite worker | ✅ | Anthropic + OpenAI |
+| Image gen worker | ✅ | Stability + Replicate |
+| URL import worker | ✅ | yt-dlp |
+| Export render worker | 🟡 | FFmpeg single-clip path; compose graph next |
+| Thumbnail worker | ✅ | |
+| `POST /v1/projects/:id/generate/*` route surface | ⬜ | Workers reachable but not yet exposed via authed endpoints |
+| Video generation | ⬜ | Provider toggle in env (`VIDEO_GEN_PROVIDER`); worker pending |
 
 ### Phase 5 — Export & publish
 | Module | Status | Notes |
 | --- | --- | --- |
-| Export job builder | 🟡 | `vrs.export.render` task with FFmpeg single-clip path; full compose graph pending |
+| `POST /v1/projects/:id/export` route | ⬜ | Next session |
+| Export status WS push | 🟡 | WebSocket wired (`/v1/ws/projects/:id`); export-specific events land with the export route |
 | Caption burn-in + animation | ⬜ | |
-| Loudness normalization (EBU R128) | ✅ | `loudnorm` filter wired |
-| Watermark for free plan | ✅ | `drawtext` overlay; brand-mark overlay variant pending |
-| Direct publish to YouTube / TikTok | ⬜ | `PublishTarget` + `PublishJob` schema ready |
+| Loudness normalization | ✅ | Wired in worker |
+| Watermark for free plan | ✅ | drawtext fallback; brand-mark overlay variant pending |
+| Direct publish (YouTube/TikTok) | ⬜ | Schema ready |
 
 ### Phase 6 — Billing & quotas
 | Module | Status | Notes |
 | --- | --- | --- |
-| Stripe customer + subscription provisioning | ⬜ | env vars wired |
-| Plan + price catalog seeded | ✅ | 4 plans, limits, features |
-| Webhook handler | ⬜ | |
-| Usage middleware | ⬜ | |
-| Billing UI | ⬜ | |
-| Customer portal embed | ⬜ | |
+| Stripe customer + subscription | ✅ | `ensureStripeCustomer`, `startCheckout`, `openPortal`, `cancelActiveSubscription` |
+| Plan catalog + price routing | ✅ | env-driven price IDs per plan/interval |
+| Webhook handler + signature verify | ✅ | subscription.* + invoice.* + checkout.session.completed |
+| Usage middleware + quota enforcement | ✅ | `assertWithinLimit`, monthly UsageRecord, plan-driven limits |
+| Billing UI | ✅ | Plans grid, current usage bars, invoice history, upgrade / portal / cancel |
+| Settings UI | ✅ | Profile form + security placeholder |
 
-### Phase 7 — Analytics & insights · Phase 8 — Admin & operations · Phase 9 — Production readiness
+### Phase 7 — Analytics & insights
 *(unchanged — all ⬜)*
+
+### Phase 8 — Admin & operations
+*(unchanged — all ⬜)*
+
+### Phase 9 — Production readiness
+| Module | Status | Notes |
+| --- | --- | --- |
+| Terraform (VPC / ECS / RDS / ElastiCache / S3 / CF / ACM / R53) | ⬜ | |
+| Helm/K8s manifests | ⬜ | |
+| Sentry, OTel, Prometheus dashboards | 🟡 | DSNs/exporters wired in code, dashboards pending |
+| Runbooks | ⬜ | |
+| Load tests (k6) + chaos drills | ⬜ | |
+| Compliance docs (privacy/ToS/DMCA) | ⬜ | |
 
 ## Per-session log
 
-### Session 1 — Foundation, auth, workers, CI/CD
+### Session 2 — Projects, uploads, editor MVP, billing
 **Landed:**
-- Complete monorepo (pnpm + turbo), shared configs, all top-level docs.
-- Complete Prisma schema (~35 models) + seed (plans, voices, templates, dev admin).
-- Docker Compose dev infra (postgres / redis / minio / rabbitmq / mailhog).
-- Shared packages: `@vrs/db`, `@vrs/types`, `@vrs/config`, `@vrs/ui`.
-- UI foundation: amber design tokens (light + dark), Button/Input/Card/Spinner/Badge/Toast.
-- **API service**: Fastify server, env-validated, structured logging (pino + redaction), AppError hierarchy, Argon2id-hashed OTP with resend cooldown, JWT + opaque-rotated refresh sessions, full auth route surface (`/v1/auth/otp/{request,verify}`, `/refresh`, `/signout`, `/session`), email service (SMTP/SendGrid/SES) with original templates.
-- **Web app**: Next.js 14 App Router, design system wired, landing page (original copy), `(auth)` flow (sign-in + 6-digit verify with paste/keyboard nav), `(app)` shell with sidebar nav, dashboard.
-- **Workers**: Python + Celery, multi-queue routing, FastAPI admin (`/health`, `/health/ready`, `/queues`), real implementations for transcription (Whisper / faster-whisper / Deepgram), TTS (ElevenLabs / Polly), highlight detection (FFmpeg + numpy), script generate + rewrite (Anthropic / OpenAI), image generation (Stability / Replicate), URL import (yt-dlp), export render (FFmpeg single-clip path), thumbnails.
-- **CI**: GitHub Actions — Node lint/typecheck/test/build, Python lint/test, container image build & push to GHCR, Trivy scan.
-- **Production Dockerfiles**: api (multi-stage, non-root, healthcheck), web (Next.js standalone), workers (ffmpeg + yt-dlp baked).
+- **`@vrs/sdk`** — fully typed API client (auth, projects, uploads, assets, templates, billing). Server + client variants under `apps/web/src/lib/{sdk,client-sdk}.ts`.
+- **Project CRUD** end-to-end:
+  - Repository (`apps/api/src/repositories/projects.repo.ts`) with cursor pagination, list filters, soft delete, deep-copy duplicate (clones tracks + clips).
+  - Service (`projects.service.ts`) with quota enforcement on create/duplicate.
+  - Routes (`projects.routes.ts`) for list / create / get / patch / delete / duplicate.
+- **Usage service + quota middleware** — `UsageRecord`-backed monthly counters, plan-driven limits, error mapping (`PROJECT_LIMIT_REACHED`, `VOICEOVER_QUOTA_EXCEEDED`, etc.).
+- **Uploads**:
+  - `POST /v1/uploads/init` returns presigned PUT URL after creating a `PENDING_UPLOAD` Asset.
+  - `POST /v1/uploads/complete` HEADs S3 to confirm, marks `UPLOADED`, enqueues thumbnail.
+  - `POST /v1/uploads/import` creates a `PROCESSING` Asset and enqueues `vrs.import.url`.
+- **Internal routes** (`/v1/internal/*`): worker-only, HMAC-token-guarded.
+  - `PATCH /jobs/:id` — workers set RUNNING / SUCCEEDED / FAILED / RETRYING.
+  - `GET /projects/:id/timeline` — export worker fetches a full timeline.
+  - `POST /assets/:id/done`, `/transcripts/done`, `/voiceovers/:id/done`, `/exports/:id/done` — close the loop on each worker outcome.
+- **Jobs service** (`jobs.service.ts`) — wraps Celery enqueue with idempotency keys + structured logging.
+- **Queue service** (`queue.service.ts`) — speaks Celery v2 wire protocol over either Redis (`LPUSH`) or RabbitMQ (`amqplib`, lazy-loaded) so the broker is env-switchable.
+- **WebSocket** (`/v1/ws/projects/:id`) — subscribes to Redis pubsub `vrs:job:*`, filters to the project's job IDs, forwards to authed client.
+- **Templates routes** — list + get-by-slug with presigned thumbnails/previews.
+- **Stripe billing**:
+  - Service: customer provisioning, checkout, billing portal, cancel-at-period-end, webhook ingestion with WebhookDelivery audit (replay-safe).
+  - Routes: plans catalog, current subscription, usage summary, invoices, checkout, portal, cancel, webhook (signature verified).
+- **Web app**:
+  - Projects list — server-rendered, search, pagination, status badges, empty state.
+  - New-project wizard — Upload / URL / Script flows; real presigned upload with XHR progress.
+  - Templates gallery — category tabs, click-to-create.
+  - Project editor at `/projects/[id]` — full editor shell.
+  - **Editor MVP**: zustand store, draggable + trimmable timeline clips, ruler with click-to-seek, playhead overlay, preview pane that scrubs an HTML5 `<video>` to the playhead, caption overlay, sidebar tools (Media / Highlights / Captions / Voice / Script&Image), toolbar with Save/Export/Undo/Redo/Zoom, keyboard shortcuts (Space, B, Delete, arrows, +/-).
+  - Billing page — plans grid, current usage bars, invoices, upgrade/portal/cancel buttons.
+  - Settings page — profile form, security placeholder.
 
 **Resume points for next session, in order:**
 
-1. **Project CRUD** in API: `routes/projects.routes.ts`, `services/projects.service.ts`, `repositories/projects.repo.ts`. DTOs already in `@vrs/types`. Wire `POST /v1/projects`, `GET /v1/projects`, `GET /v1/projects/:id`, `PUT /v1/projects/:id`, `DELETE /v1/projects/:id`. Bump `User.projectsCount` on create/delete.
-2. **Presigned upload flow**: `routes/uploads.routes.ts` + `services/storage.service.ts` (`createMultipartUpload`, `presignedPut`, `completeUpload`). DTOs in `@vrs/types/assets`. After client finishes upload, register the asset and (optionally) enqueue a thumbnail job.
-3. **Internal callback routes**: `/v1/internal/jobs/:id` (PATCH) so the workers' `api_client.update_job` actually works. Guarded by `requireInternal` middleware. Also `/v1/internal/projects/:id/timeline` for the export task.
-4. **Web: Projects list + New-project wizard**: `/app/(app)/projects/page.tsx` and `/projects/new/page.tsx`. Use the design system; fetch via the `api` client + TanStack Query.
-5. **Internal SDK package**: `packages/sdk` (typed `@vrs/sdk` against the API) so the web app stops hand-coding URLs.
-6. **Templates page**: server-fetched from the seeded `Template` table, rendered as a grid; click → create project with `templateId`.
-7. **Editor MVP**: timeline data model (already in schema) → state store (zustand) → drag/drop with `dnd-kit` → preview compositor with `<video>` + canvas overlay.
-8. **Stripe billing**: customer creation on first paid action, checkout, customer portal, webhook handler, usage middleware.
+1. **Clip mutation REST endpoints** — `POST/PATCH/DELETE /v1/projects/:id/tracks/:trackId/clips` so the editor persists its timeline state instead of only living in zustand.
+2. **`POST /v1/projects/:id/generate/{highlights,transcribe,voice,script,image,export}`** — authed endpoints that enqueue the existing worker tasks. Then plumb the WS progress events into the editor sidebar buttons.
+3. **`PATCH /v1/users/me`** — back the settings form properly; add session-list/revoke endpoints.
+4. **Audit log writes** — every auth + billing event lands a row.
+5. **Export status page** at `/projects/[id]/exports/[exportId]` with WS progress + download link when ready.
+6. **Admin console** — `/admin` route group, user/sub list, abuse/ticket queues; protect with role check already present in `AppShell`.
+7. **OAuth (Google)** — schema already supports it; finish provider plumb-through.
+8. **Terraform** — VPC, ECS, RDS, ElastiCache, S3, CloudFront, ACM, Route53.
 
 **Notes for resuming:**
-- All env vars are documented in `.env.example`.
-- `make setup` runs first-time provisioning end-to-end.
-- The API boots today with `pnpm --filter @vrs/api dev` after `pnpm db:migrate && pnpm db:seed`.
-- The schema is the source of truth — never bypass Prisma migrations.
-- Worker task callbacks expect the internal callback endpoint (item 3 above) to exist before they can fully close the loop. Until that lands, jobs run successfully but the DB rows stay `RUNNING` from the worker's perspective.
-- Brand is "VideoRankingStudio" with an amber/gold accent (#F5A70B core, full `--color-brand-*` ramp in `packages/ui/src/tokens.css`). Logo is a stacked-triangle "play" mark — see `apps/web/src/components/Logo.tsx`.
+- `make setup` + `pnpm dev` boots the whole stack locally.
+- The API serves Swagger at `http://localhost:4000/docs` in non-prod.
+- The SDK is the contract between web and API — keep it in sync as routes evolve.
+- The editor store lives at `apps/web/src/state/editor-store.ts`. Timeline persistence is the next dependency to clear.
+- Stripe is fully wired but waits on real `STRIPE_*` env vars before it can issue real checkouts.
+- Brand stays amber/gold, Inter / JetBrains Mono, "stacked play triangle" mark.

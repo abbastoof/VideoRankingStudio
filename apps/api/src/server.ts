@@ -1,6 +1,7 @@
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import swagger from '@fastify/swagger';
@@ -11,19 +12,24 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { env } from './config/env';
 import { logger } from './lib/logger';
 import { errorHandler } from './middleware/error';
+import { assetsRoutes } from './routes/assets.routes';
 import { authRoutes } from './routes/auth.routes';
+import { billingRoutes } from './routes/billing.routes';
 import { healthRoutes } from './routes/health.routes';
+import { internalRoutes } from './routes/internal.routes';
+import { projectsRoutes } from './routes/projects.routes';
+import { templatesRoutes } from './routes/templates.routes';
+import { uploadsRoutes } from './routes/uploads.routes';
+import { wsRoutes } from './routes/ws.routes';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
     loggerInstance: logger,
     trustProxy: true,
-    bodyLimit: 10_485_760, // 10 MiB JSON cap; uploads go direct to S3
-    genReqId: (req) =>
-      (req.headers['x-request-id'] as string | undefined) ?? crypto.randomUUID(),
+    bodyLimit: 10_485_760,
+    genReqId: (req) => (req.headers['x-request-id'] as string | undefined) ?? crypto.randomUUID(),
     requestIdHeader: 'x-request-id',
     requestIdLogLabel: 'requestId',
-    disableRequestLogging: false,
   });
 
   await app.register(sensible);
@@ -46,6 +52,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     keyGenerator: (req) => req.auth?.sub ?? req.ip,
   });
   await app.register(websocket);
+  await app.register(multipart, { limits: { fileSize: env.UPLOAD_MAX_BYTES } });
 
   if (env.NODE_ENV !== 'production') {
     await app.register(swagger, {
@@ -57,11 +64,6 @@ export async function buildServer(): Promise<FastifyInstance> {
           version: '0.1.0',
         },
         servers: [{ url: env.API_URL }],
-        components: {
-          securitySchemes: {
-            bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-          },
-        },
       },
     });
     await app.register(swaggerUi, { routePrefix: '/docs' });
@@ -71,6 +73,13 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await app.register(healthRoutes);
   await app.register(authRoutes, { prefix: '/v1' });
+  await app.register(projectsRoutes, { prefix: '/v1' });
+  await app.register(uploadsRoutes, { prefix: '/v1' });
+  await app.register(assetsRoutes, { prefix: '/v1' });
+  await app.register(templatesRoutes, { prefix: '/v1' });
+  await app.register(billingRoutes, { prefix: '/v1' });
+  await app.register(internalRoutes, { prefix: '/v1' });
+  await app.register(wsRoutes, { prefix: '/v1' });
 
   app.get('/', async () => ({
     name: 'VideoRankingStudio API',
