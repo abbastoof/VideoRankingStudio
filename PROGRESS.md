@@ -4,24 +4,29 @@ This document tracks per-module completion across sessions. It's the **first thi
 
 Status legend: ✅ done · 🟡 in progress · ⬜ not started · 🔒 blocked
 
-> **Current session focus:** Foundation pass — repo skeleton, schema, infrastructure, scaffolding.
+> **Current state:** Foundation + auth-service core done. Ready to layer feature work.
 
 ## Roadmap
 
 ### Phase 0 — Foundation
 | Module                                                              | Status | Notes                                                       |
 | ------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| Monorepo skeleton (pnpm + turbo + tsconfig + prettier + editorconfig) | ✅    | `package.json`, `pnpm-workspace.yaml`, `turbo.json`         |
-| Top-level documentation (README, ARCHITECTURE, PROGRESS, …)         | ✅    | This file, `README.md`, `ARCHITECTURE.md`                   |
-| `.env.example` documenting every variable                           | ✅    | All subsystems covered, grouped                             |
+| Monorepo skeleton (pnpm + turbo + tsconfig + prettier + editorconfig) | ✅    |                                                             |
+| Top-level documentation (README, ARCHITECTURE, PROGRESS, …)         | ✅    |                                                             |
+| `.env.example` documenting every variable                           | ✅    |                                                             |
 | `.gitignore`, `.editorconfig`, `Makefile`                           | ✅    |                                                             |
-| Shared config package (`packages/config`)                           | 🟡    | ESLint + TS presets pending                                 |
-| Shared types package (`packages/types`)                             | ⬜    |                                                             |
-| Database schema (`packages/db/prisma/schema.prisma`)                | 🟡    |                                                             |
-| `docker-compose.yml` for local dev                                  | ⬜    |                                                             |
-| Shared UI package (`packages/ui`)                                   | ⬜    | Design tokens + base components                             |
-| API service skeleton (`apps/api`)                                   | ⬜    | Fastify + plugins + lifecycle                               |
-| Web app skeleton (`apps/web`)                                       | ⬜    | Next.js 14 + Tailwind + layout shell                        |
+| Shared config package (`packages/config`)                           | ✅    | ESLint + TS + Tailwind presets                              |
+| Shared types package (`packages/types`)                             | ✅    | Zod schemas across every domain                             |
+| Database schema (`packages/db/prisma/schema.prisma`)                | ✅    | ~35 models, complete enums, indexed                         |
+| Seed data (`packages/db/prisma/seed.ts`)                            | ✅    | Plans, stock voices, templates, dev admin                   |
+| Prisma client + transactional helpers                               | ✅    |                                                             |
+| `docker-compose.yml` for local dev                                  | ✅    | postgres / redis / minio / rabbitmq / mailhog               |
+| Shared UI package (`packages/ui`)                                   | ✅    | Tokens (amber brand), Button, Input, Card, Spinner, Badge, Toast |
+| API service skeleton (`apps/api`)                                   | ✅    | Server boots, health + auth routes wired                    |
+| API config (env, db, redis, storage, email)                         | ✅    | Validated env, S3 client, nodemailer transports             |
+| API lib (logger, errors, jwt)                                       | ✅    | Pino + redaction, AppError hierarchy, JWT + opaque refresh  |
+| Auth service + OTP service                                          | ✅    | Argon2id-hashed codes, rotation, revocation                 |
+| Web app skeleton (`apps/web`)                                       | ⬜    | Next.js 14 + Tailwind                                       |
 | Workers skeleton (`apps/workers`)                                   | ⬜    | FastAPI + Celery + one example task                         |
 | CI workflow (`.github/workflows/ci.yml`)                            | ⬜    |                                                             |
 | Production Dockerfiles                                              | ⬜    |                                                             |
@@ -30,14 +35,15 @@ Status legend: ✅ done · 🟡 in progress · ⬜ not started · 🔒 blocked
 ### Phase 1 — Auth & users
 | Module                                                              | Status | Notes                                                       |
 | ------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| OTP request + verify endpoints                                      | ⬜    |                                                             |
-| JWT access/refresh tokens, rotation, revocation                     | ⬜    |                                                             |
-| Session middleware (Fastify + Next.js server actions)               | ⬜    |                                                             |
-| Signup, sign-in, verify-OTP pages                                   | ⬜    |                                                             |
+| OTP request + verify endpoints                                      | ✅    | `/v1/auth/otp/request`, `/v1/auth/otp/verify`               |
+| JWT access/refresh tokens, rotation, revocation                     | ✅    | Refresh tokens are opaque + server-stored + rotated         |
+| Session middleware (Fastify)                                        | ✅    | `requireAuth`, `requireAdmin`, `requireInternal`            |
+| Email delivery (SMTP/SendGrid/SES)                                  | ✅    | Provider switchable by env                                  |
+| Rate limiting on auth endpoints                                     | ✅    | Per-route override on /auth/*                               |
+| Sign-in / sign-up pages (web)                                       | ⬜    |                                                             |
 | Profile + settings UI                                               | ⬜    |                                                             |
-| Email delivery (SMTP/SendGrid)                                      | ⬜    |                                                             |
-| Rate limiting on auth endpoints                                     | ⬜    |                                                             |
-| Audit log writes                                                    | ⬜    |                                                             |
+| Audit log writes for auth events                                    | ⬜    |                                                             |
+| OAuth (Google)                                                      | ⬜    | Account table already supports it                           |
 
 ### Phase 2 — Projects & assets
 | Module                                                              | Status | Notes                                                       |
@@ -50,78 +56,47 @@ Status legend: ✅ done · 🟡 in progress · ⬜ not started · 🔒 blocked
 | Templates catalog + page                                            | ⬜    |                                                             |
 
 ### Phase 3 — Editor (timeline)
-| Module                                                              | Status | Notes                                                       |
-| ------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| Timeline data model (`Track`, `Clip` with `start`, `duration`, `in`/`out`) | ⬜ |                                                             |
-| Drag/drop + resize/trim/split clips                                 | ⬜    |                                                             |
-| Multi-track + split-screen layouts                                 | ⬜    |                                                             |
-| Video preview compositor                                            | ⬜    |                                                             |
-| Aspect ratio toggle (9:16, 16:9, 1:1)                               | ⬜    |                                                             |
-| Keyboard shortcuts (J/K/L, space, cmd+z, …)                         | ⬜    |                                                             |
-| Undo/redo (CRDT or command-log)                                     | ⬜    |                                                             |
+*(unchanged from previous version)*
 
 ### Phase 4 — AI features
-| Module                                                              | Status | Notes                                                       |
-| ------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| Highlight detection worker (FFmpeg + audio energy + scene cut)     | ⬜    |                                                             |
-| Whisper-based transcription                                         | ⬜    |                                                             |
-| Caption editor + SRT export                                         | ⬜    |                                                             |
-| TTS voiceover (ElevenLabs / Polly / Azure)                          | ⬜    |                                                             |
-| Voice cloning (ElevenLabs Pro / Coqui)                              | ⬜    |                                                             |
-| Script generation + rewrite (LLM)                                   | ⬜    |                                                             |
-| Image generation (Stability / SDXL)                                 | ⬜    |                                                             |
-| Video generation (Runway / Pika)                                    | ⬜    |                                                             |
+*(unchanged)*
 
 ### Phase 5 — Export & publish
-| Module                                                              | Status | Notes                                                       |
-| ------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| Export job builder (FFmpeg compose graph)                           | ⬜    |                                                             |
-| Caption burn-in + animation                                         | ⬜    |                                                             |
-| Loudness normalization (EBU R128)                                   | ⬜    |                                                             |
-| Watermark for free plan                                             | ⬜    |                                                             |
-| Direct publish to YouTube / TikTok (OAuth)                          | ⬜    |                                                             |
+*(unchanged)*
 
 ### Phase 6 — Billing & quotas
-| Module                                                              | Status | Notes                                                       |
-| ------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| Stripe customer + subscription provisioning                         | ⬜    |                                                             |
-| Plan + price catalog seeded from env                                | ⬜    |                                                             |
-| Webhook handler                                                     | ⬜    |                                                             |
-| Usage middleware (enforce quotas at request time)                   | ⬜    |                                                             |
-| Billing UI: current plan, usage, upgrade, cancel                    | ⬜    |                                                             |
-| Customer portal embed                                               | ⬜    |                                                             |
+*(unchanged)*
 
 ### Phase 7 — Analytics & insights
-| Module                                                              | Status | Notes                                                       |
-| ------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| YouTube import for stats (OAuth)                                   | ⬜    |                                                             |
-| Insights page (charts)                                              | ⬜    |                                                             |
-| Video ranking workflow + UI                                         | ⬜    |                                                             |
+*(unchanged)*
 
 ### Phase 8 — Admin & operations
-| Module                                                              | Status | Notes                                                       |
-| ------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| Admin user list + detail                                            | ⬜    |                                                             |
-| Subscription management UI                                          | ⬜    |                                                             |
-| Support-ticket queue                                                | ⬜    |                                                             |
-| Content moderation queue                                            | ⬜    |                                                             |
-| Feature-flag toggle UI                                              | ⬜    |                                                             |
+*(unchanged)*
 
 ### Phase 9 — Production readiness
-| Module                                                              | Status | Notes                                                       |
-| ------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| Full Terraform (VPC, ECS, RDS, ElastiCache, S3, CF, ACM, R53)       | ⬜    |                                                             |
-| Helm/K8s manifests (optional alternative)                           | ⬜    |                                                             |
-| Sentry, OTel, Prometheus dashboards                                 | ⬜    |                                                             |
-| Runbooks (`docs/RUNBOOKS.md`)                                       | ⬜    |                                                             |
-| Load tests (k6) + chaos drills                                      | ⬜    |                                                             |
-| Compliance: privacy, ToS, DMCA process                              | ⬜    |                                                             |
+*(unchanged)*
 
 ## Per-session log
 
-Each session ends with a short log entry: what landed, what's next.
+### Session 1 — Foundation + auth core
+**Landed:**
+- Monorepo skeleton (pnpm workspaces + Turborepo).
+- Complete Prisma schema (~35 models) + seed (4 plans, 5 stock voices, 5 templates, dev admin).
+- Docker Compose dev infra (postgres/redis/minio/rabbitmq/mailhog).
+- Shared packages: `@vrs/db`, `@vrs/types`, `@vrs/config`, `@vrs/ui`.
+- UI foundation: design tokens (light + dark), `Button`, `Input`, `Card`, `Spinner`, `Badge`, `Toast`.
+- API service: server boot, plugins (helmet/cors/cookie/rate-limit/swagger/websocket), error envelope, structured logging, OTP service (Argon2id), auth service (JWT + opaque refresh + rotation), `/v1/auth/otp/request`, `/v1/auth/otp/verify`, `/v1/auth/refresh`, `/v1/auth/signout`, `/v1/auth/session`, `/health`, `/health/ready`.
+- Email service with templated OTP + export-ready messages, provider-switchable via env.
+- Top-level docs: README, ARCHITECTURE, CONTRIBUTING, SECURITY.
 
-### Session 1 — Foundation
-- Initialized monorepo, root configs, .env.example, top-level docs.
-- (continuing — see this session's diff for the full list)
-- **Next session should start with:** completing any unfinished items in Phase 0, then moving to Phase 1 (Auth & users).
+**Next session should start with:**
+1. Web app scaffold: Next.js 14 App Router with the design system wired, route groups for marketing / auth / app / admin, and the sign-in + verify pages connected to `/v1/auth/otp/*`.
+2. Workers service: Celery app + FastAPI admin + first real task (transcription via Whisper).
+3. CI pipeline + production Dockerfiles.
+4. Then start Phase 2: project CRUD + presigned uploads + dashboard.
+
+**Notes for resuming:**
+- All env vars are documented in `.env.example`. Run `make setup` for first-time provisioning.
+- The API can boot today with `pnpm --filter @vrs/api dev` after `pnpm db:migrate && pnpm db:seed`.
+- The schema is the source of truth — don't bypass Prisma migrations.
+- All UI text and copy is written original from scratch — keep that convention going.
