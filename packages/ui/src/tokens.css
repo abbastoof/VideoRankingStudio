@@ -1,0 +1,96 @@
+/* =============================================================================
+ * Design tokens for VideoRankingStudio.
+ *
+ * Tokens are declared as raw RGB triplets so Tailwind can compose them with
+ * arbitrary alpha (`text-foreground/60`). Light theme is the default; dark
+ * theme is opted into via `data-theme="dark"` on the document root or via the
+ * `.dark` class (so the system-preference query can flip it).
+ *
+ * The brand ramp is an amber/gold spectrum — a neutral choice that signals
+ * energy + creativity and pairs well with monochrome surfaces. Pick a different
+ * ramp by editing only the `--color-brand-*` variables here.
+ * ============================================================================= */
+
+:root {
+  /* Surfaces */
+  --color-background: 255 255 255;
+  --color-foreground: 15 15 17;
+  --color-surface: 250 250 250;
+  --color-surface-muted: 244 244 245;
+  --color-surface-raised: 255 255 255;
+  --color-border: 228 228 231;
+  --color-border-strong: 212 212 216;
+  --color-muted: 244 244 245;
+  --color-muted-foreground: 113 113 122;
+
+  /* Brand (amber/gold) */
+  --color-brand-50: 255 251 235;
+  --color-brand-100: 254 243 199;
+  --color-brand-200: 253 230 138;
+  --color-brand-300: 252 211 77;
+  --color-brand-400: 251 191 36;
+  --color-brand-500: 245 167 11;
+  --color-brand-600: 217 138 7;
+  --color-brand-700: 180 105 10;
+  --color-brand-800: 146 83 16;
+  --color-brand-900: 120 68 18;
+  --color-brand-foreground: 41 25 8;
+
+  /* Accent (cyan, used sparingly for links + focus rings on dark surfaces) */
+  --color-accent: 14 165 233;
+  --color-accent-foreground: 240 249 255;
+
+  /* Semantic */
+  --color-success: 22 163 74;
+  --color-success-foreground: 240 253 244;
+  --color-warning: 234 179 8;
+  --color-warning-foreground: 254 252 232;
+  --color-danger: 220 38 38;
+  --color-danger-foreground: 254 242 242;
+  --color-info: 59 130 246;
+  --color-info-foreground: 239 246 255;
+
+  /* Shape */
+  --radius: 0.5rem; /* 8px */
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: 'Inter Display', var(--font-sans);
+}
+
+[data-theme='dark'],
+.dark {
+  --color-background: 8 8 12;
+  --color-foreground: 250 250 250;
+  --color-surface: 18 18 22;
+  --color-surface-muted: 24 24 30;
+  --color-surface-raised: 28 28 34;
+  --color-border: 39 39 46;
+  --color-border-strong: 63 63 70;
+  --color-muted: 39 39 46;
+  --color-muted-foreground: 161 161 170;
+
+  /* Brand stays the same so identity holds across themes */
+  --color-brand-foreground: 28 18 4;
+
+  --color-success: 34 197 94;
+  --color-warning: 250 204 21;
+  --color-danger: 248 113 113;
+  --color-info: 96 165 250;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-background: 8 8 12;
+    --color-foreground: 250 250 250;
+    --color-surface: 18 18 22;
+    --color-surface-muted: 24 24 30;
+    --color-surface-raised: 28 28 34;
+    --color-border: 39 39 46;
+    --color-border-strong: 63 63 70;
+    --color-muted: 39 39 46;
+    --color-muted-foreground: 161 161 170;
+    --color-brand-foreground: 28 18 4;
+  }
+}

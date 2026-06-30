@@ -1,0 +1,15 @@
+# Default owner for everything in the repo
+*                               @vrs/core
+
+# Service-specific
+/apps/web/                      @vrs/frontend
+/apps/api/                      @vrs/backend
+/apps/workers/                  @vrs/ai
+/packages/db/                   @vrs/backend @vrs/data
+/packages/ui/                   @vrs/frontend @vrs/design
+/packages/types/                @vrs/backend @vrs/frontend
+/packages/sdk/                  @vrs/backend
+/infrastructure/                @vrs/infra
+/.github/                       @vrs/infra
+/docs/SECURITY.md               @vrs/security
+/SECURITY.md                    @vrs/security

@@ -1,0 +1,11 @@
+{
+  "extends": "@vrs/config/tsconfig/react",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "composite": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "types": ["react"]
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,83 @@
+# dependencies
+node_modules
+.pnpm-store
+.yarn
+.pnp
+.pnp.js
+
+# build artifacts
+dist
+build
+out
+.next
+.turbo
+.swc
+*.tsbuildinfo
+.cache
+
+# python
+__pycache__
+*.py[cod]
+*$py.class
+.venv
+venv
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+
+# environment & secrets
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.staging
+*.pem
+*.key
+*.crt
+secrets.yml
+
+# logs
+*.log
+logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# editor
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.recommended.json
+*.swp
+*.swo
+.DS_Store
+
+# coverage & test artifacts
+coverage
+.nyc_output
+playwright-report
+test-results
+
+# infrastructure
+.terraform
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terragrunt-cache
+
+# storage / generated media
+storage/local
+tmp
+uploads
+generated
+
+# prisma
+packages/db/prisma/migrations/dev.db*
+
+# docker
+docker-compose.override.yml

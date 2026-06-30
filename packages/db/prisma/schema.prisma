@@ -1,0 +1,1032 @@
+// =============================================================================
+// VideoRankingStudio — canonical database schema
+//
+// Conventions:
+//   * Primary keys: cuid (string) for user-visible entities, int for internal
+//     append-only logs (AuditLog, WebhookDelivery) for compactness.
+//   * Soft deletes: nullable `deletedAt` on user-owned aggregates (User,
+//     Project). Hard deletes on dependent rows are fine via FK cascade.
+//   * All timestamps are stored as UTC `DateTime`.
+//   * JSON columns use `Json` (jsonb on Postgres). Their schemas are typed in
+//     `packages/types` — single source of truth lives there.
+//   * Money is stored in *minor units* (cents) as Int. Currency in `Plan`.
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
+  previewFeatures = ["fullTextSearchPostgres", "metrics", "tracing"]
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("DATABASE_URL_SHADOW")
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPPORT
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING_DELETION
+}
+
+enum OtpPurpose {
+  SIGN_IN
+  SIGN_UP
+  EMAIL_CHANGE
+  DELETE_ACCOUNT
+  STEP_UP // re-verify for sensitive admin actions
+}
+
+enum AuthProvider {
+  EMAIL_OTP
+  GOOGLE
+  APPLE
+}
+
+enum ProjectType {
+  SHORTS
+  TEXT_STORY
+  COMMENTARY
+  RANKING
+  TEMPLATE_BASED
+  IMPORT
+}
+
+enum ProjectStatus {
+  DRAFT
+  PROCESSING
+  READY
+  ARCHIVED
+  ERROR
+}
+
+enum ProjectAspectRatio {
+  R9_16
+  R16_9
+  R1_1
+  R4_5
+}
+
+enum TrackKind {
+  VIDEO
+  AUDIO
+  CAPTION
+  OVERLAY // images, text, stickers
+}
+
+enum ClipSource {
+  ASSET // bound to an Asset row
+  VOICEOVER
+  GENERATED_IMAGE
+  GENERATED_VIDEO
+  TEXT // pure text overlay
+}
+
+enum AssetKind {
+  VIDEO
+  AUDIO
+  IMAGE
+  FONT
+  SUBTITLE
+}
+
+enum AssetSource {
+  UPLOAD
+  URL_IMPORT // yt-dlp etc.
+  AI_GENERATED
+  TEMPLATE
+}
+
+enum AssetStatus {
+  PENDING_UPLOAD
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum TranscriptStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum VoiceKind {
+  STOCK
+  CLONED
+}
+
+enum VoiceStatus {
+  TRAINING
+  READY
+  FAILED
+  DISABLED
+}
+
+enum VoiceProvider {
+  ELEVENLABS
+  AZURE
+  POLLY
+  COQUI
+  PLAYHT
+  INTERNAL
+}
+
+enum VoiceoverStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum AiJobKind {
+  HIGHLIGHT_DETECTION
+  TRANSCRIPTION
+  VOICEOVER
+  VOICE_CLONE_TRAIN
+  SCRIPT_GENERATE
+  SCRIPT_REWRITE
+  IMAGE_GENERATE
+  VIDEO_GENERATE
+  EXPORT_RENDER
+  URL_IMPORT
+  THUMBNAIL_GENERATE
+}
+
+enum AiJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  RETRYING
+}
+
+enum ExportFormat {
+  MP4_H264
+  MP4_H265
+  WEBM_VP9
+  MOV_PRORES
+  GIF
+}
+
+enum ExportStatus {
+  QUEUED
+  RENDERING
+  UPLOADING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum PlanCode {
+  FREE
+  CREATOR
+  BUSINESS
+  ENTERPRISE
+}
+
+enum BillingInterval {
+  MONTH
+  YEAR
+}
+
+enum SubscriptionStatus {
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  UNPAID
+  PAUSED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum UsageKind {
+  VIDEOS_CREATED
+  VOICEOVER_CHARACTERS
+  TRANSCRIPTION_MINUTES
+  EXPORT_MINUTES
+  IMAGE_GENERATIONS
+  VIDEO_GENERATIONS
+  STORAGE_BYTES
+  AI_REQUESTS
+}
+
+enum NotificationKind {
+  EXPORT_READY
+  EXPORT_FAILED
+  TRANSCRIPTION_READY
+  VOICE_TRAINED
+  PAYMENT_SUCCEEDED
+  PAYMENT_FAILED
+  SUBSCRIPTION_RENEWED
+  SUBSCRIPTION_CANCELED
+  TICKET_REPLY
+  SYSTEM_ANNOUNCEMENT
+  QUOTA_WARNING
+  QUOTA_EXCEEDED
+}
+
+enum TicketStatus {
+  OPEN
+  WAITING_USER
+  WAITING_SUPPORT
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum AbuseReason {
+  COPYRIGHT
+  IMPERSONATION
+  HATE_SPEECH
+  SEXUAL_CONTENT
+  HARASSMENT
+  SPAM
+  OTHER
+}
+
+enum AbuseStatus {
+  RECEIVED
+  REVIEWING
+  ACTION_TAKEN
+  DISMISSED
+}
+
+enum PublishProvider {
+  YOUTUBE
+  TIKTOK
+  INSTAGRAM
+}
+
+enum PublishStatus {
+  QUEUED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum WebhookSource {
+  STRIPE
+  ELEVENLABS
+  RUNWAY
+  PIKA
+  REPLICATE
+  OTHER
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+// =============================================================================
+// Identity & access
+// =============================================================================
+
+model User {
+  id              String         @id @default(cuid())
+  email           String         @unique @db.Citext
+  name            String?
+  imageUrl        String?
+  role            UserRole       @default(USER)
+  status          AccountStatus  @default(ACTIVE)
+  locale          String         @default("en")
+  timezone        String         @default("UTC")
+  emailVerifiedAt DateTime?
+  marketingOptIn  Boolean        @default(false)
+  lastSeenAt      DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  // counters denormalized for cheap dashboards
+  projectsCount     Int @default(0)
+  exportsCount      Int @default(0)
+
+  accounts         Account[]
+  sessions         Session[]
+  otpCodes         OtpCode[]
+  projects         Project[]
+  voices           Voice[]
+  aiJobs           AiJob[]
+  exports          Export[]
+  apiKeys          ApiKey[]
+  auditLogs        AuditLog[]            @relation("AuditActor")
+  notifications   Notification[]
+  subscriptions    Subscription[]
+  invoices         Invoice[]
+  usageRecords     UsageRecord[]
+  supportTickets   SupportTicket[]
+  ticketMessages   TicketMessage[]
+  publishTargets   PublishTarget[]
+  reportsFiled     AbuseReport[]         @relation("ReportFiler")
+
+  @@index([status, role])
+  @@index([deletedAt])
+}
+
+model Account {
+  id            String       @id @default(cuid())
+  userId        String
+  provider      AuthProvider
+  providerSub   String       // the subject identifier returned by the OAuth provider
+  email         String?
+  accessToken   String?      @db.Text
+  refreshToken  String?      @db.Text
+  expiresAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSub])
+  @@index([userId])
+}
+
+model Session {
+  id               String   @id @default(cuid())
+  userId           String
+  refreshTokenHash String   @unique // sha256 of the opaque token
+  userAgent        String?
+  ip               String?
+  rememberMe       Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  lastUsedAt       DateTime @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  replacedById     String?  // rotated chain
+  replacedBy       Session? @relation("SessionRotation", fields: [replacedById], references: [id])
+  replacements     Session[] @relation("SessionRotation")
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model OtpCode {
+  id            String     @id @default(cuid())
+  userId        String?
+  email         String     @db.Citext
+  codeHash      String     // Argon2id of the 6-digit code
+  purpose       OtpPurpose
+  attempts      Int        @default(0)
+  maxAttempts   Int        @default(5)
+  ip            String?
+  userAgent     String?
+  consumedAt    DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime   @default(now())
+
+  user          User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, purpose, expiresAt])
+  @@index([userId])
+}
+
+model ApiKey {
+  id           String    @id @default(cuid())
+  userId       String
+  name         String
+  prefix       String    // first 8 chars, indexed for lookup
+  hash         String    @unique // sha256 of the full secret
+  scopesJson   Json      // string[] — granular scopes
+  lastUsedAt   DateTime?
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([prefix])
+}
+
+// =============================================================================
+// Content: projects, tracks, clips, assets
+// =============================================================================
+
+model Project {
+  id                String              @id @default(cuid())
+  userId            String
+  title             String
+  description       String?
+  type              ProjectType         @default(SHORTS)
+  status            ProjectStatus       @default(DRAFT)
+  aspectRatio       ProjectAspectRatio  @default(R9_16)
+  durationMs        Int                 @default(0)
+  thumbnailKey      String?             // S3 key in vrs-public
+  scriptText        String?             @db.Text
+  settingsJson      Json                @default("{}")
+  templateId        String?
+  pinned            Boolean             @default(false)
+  lastEditedAt      DateTime            @default(now())
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  deletedAt         DateTime?
+
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template          Template?           @relation(fields: [templateId], references: [id])
+  tracks            Track[]
+  assets            Asset[]
+  transcripts       Transcript[]
+  voiceovers        Voiceover[]
+  aiJobs            AiJob[]
+  exports           Export[]
+  captions          Caption[]
+  publishJobs       PublishJob[]
+  abuseReports      AbuseReport[]
+
+  @@index([userId, status, deletedAt])
+  @@index([userId, lastEditedAt])
+  @@index([templateId])
+}
+
+model Track {
+  id          String     @id @default(cuid())
+  projectId   String
+  kind        TrackKind
+  index       Int        // z-order from bottom (0) to top
+  muted       Boolean    @default(false)
+  locked      Boolean    @default(false)
+  volume      Float      @default(1.0)
+  createdAt   DateTime   @default(now())
+
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clips       Clip[]
+
+  @@unique([projectId, kind, index])
+  @@index([projectId])
+}
+
+model Clip {
+  id              String       @id @default(cuid())
+  trackId         String
+  source          ClipSource
+  assetId         String?
+  voiceoverId     String?
+  startMs         Int          // position on the timeline
+  durationMs      Int
+  inMs            Int          @default(0) // offset into the source media
+  outMs           Int          @default(0) // outMs - inMs == durationMs * speed
+  speed           Float        @default(1.0)
+  volume          Float        @default(1.0)
+  opacity         Float        @default(1.0)
+  transformJson   Json         @default("{}") // scale, translate, rotate, crop
+  effectsJson     Json         @default("[]") // [{type, params}]
+  textJson        Json?        // for ClipSource.TEXT
+  metadataJson    Json         @default("{}")
+  isHighlight     Boolean      @default(false) // produced by HIGHLIGHT_DETECTION
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  track           Track        @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  asset           Asset?       @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  voiceover       Voiceover?   @relation(fields: [voiceoverId], references: [id], onDelete: SetNull)
+
+  @@index([trackId, startMs])
+  @@index([assetId])
+  @@index([voiceoverId])
+}
+
+model Asset {
+  id            String       @id @default(cuid())
+  projectId     String?      // null = user-library asset
+  userId        String       // owner, denormalized for quick lookups
+  kind          AssetKind
+  source        AssetSource
+  originUrl     String?      // for URL_IMPORT
+  s3Bucket      String
+  s3Key         String
+  mimeType      String
+  sizeBytes     BigInt       @default(0)
+  durationMs    Int?
+  width         Int?
+  height        Int?
+  fps           Float?
+  sha256        String?
+  status        AssetStatus  @default(PENDING_UPLOAD)
+  errorMessage  String?
+  metadataJson  Json         @default("{}")
+  thumbnailKey  String?      // generated preview frame
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  project       Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clips         Clip[]
+  transcripts   Transcript[]
+
+  @@index([userId, kind, status])
+  @@index([projectId])
+  @@index([sha256])
+}
+
+// =============================================================================
+// Captions & transcripts
+// =============================================================================
+
+model Transcript {
+  id           String           @id @default(cuid())
+  projectId    String
+  assetId      String?
+  language     String           @default("en")
+  provider     String           // openai_whisper, deepgram, ...
+  modelVersion String?
+  status       TranscriptStatus @default(QUEUED)
+  durationMs   Int              @default(0)
+  srtKey       String?          // S3 key
+  vttKey       String?
+  contentText  String?          @db.Text // concatenated for full-text search
+  errorMessage String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  project      Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  asset        Asset?           @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  segments     TranscriptSegment[]
+
+  @@index([projectId, status])
+  @@index([assetId])
+}
+
+model TranscriptSegment {
+  id           String     @id @default(cuid())
+  transcriptId String
+  index        Int
+  startMs      Int
+  endMs        Int
+  text         String     @db.Text
+  speakerLabel String?
+  confidence   Float?
+  wordsJson    Json?      // [{word, startMs, endMs, confidence}]
+
+  transcript   Transcript @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+
+  @@unique([transcriptId, index])
+  @@index([transcriptId, startMs])
+}
+
+model Caption {
+  id            String   @id @default(cuid())
+  projectId     String
+  transcriptId  String?
+  name          String   @default("Captions")
+  styleJson     Json     @default("{}") // font, color, size, position, animation
+  segmentsJson  Json     @default("[]") // editable copy of transcript segments
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+// =============================================================================
+// Voices & voiceovers
+// =============================================================================
+
+model Voice {
+  id               String        @id @default(cuid())
+  userId           String?       // null for global stock voices
+  kind             VoiceKind
+  name             String
+  description      String?
+  provider         VoiceProvider
+  providerVoiceId  String        // ID returned by the provider
+  status           VoiceStatus   @default(READY)
+  language         String        @default("en")
+  gender           String?
+  ageGroup         String?
+  previewKey       String?       // S3 key for an audio sample
+  trainingJobId    String?       // AiJob id for cloning
+  consentSignedAt  DateTime?     // required for CLONED voices
+  trainingProgress Float?        // 0..1
+  charactersUsed   Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  disabledAt       DateTime?
+
+  user             User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voiceovers       Voiceover[]
+
+  @@unique([provider, providerVoiceId])
+  @@index([userId, kind, status])
+  @@index([kind, language])
+}
+
+model Voiceover {
+  id                String          @id @default(cuid())
+  projectId         String
+  voiceId           String
+  scriptText        String          @db.Text
+  status            VoiceoverStatus @default(QUEUED)
+  audioBucket       String?
+  audioKey          String?
+  durationMs        Int?
+  charactersUsed    Int             @default(0)
+  speed             Float           @default(1.0)
+  pitch             Float           @default(0.0)
+  stability         Float?          // provider-specific style params
+  similarityBoost   Float?
+  styleJson         Json            @default("{}")
+  errorMessage      String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  project           Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  voice             Voice           @relation(fields: [voiceId], references: [id], onDelete: Restrict)
+  clips             Clip[]
+
+  @@index([projectId, status])
+  @@index([voiceId])
+}
+
+// =============================================================================
+// AI jobs (queue + audit)
+// =============================================================================
+
+model AiJob {
+  id            String       @id @default(cuid())
+  userId        String
+  projectId     String?
+  kind          AiJobKind
+  status        AiJobStatus  @default(QUEUED)
+  priority      Int          @default(50) // 0=highest
+  payloadJson   Json
+  resultJson    Json?
+  errorJson     Json?
+  attempts      Int          @default(0)
+  maxAttempts   Int          @default(3)
+  scheduledFor  DateTime     @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  workerId      String?      // which worker process picked this up
+  externalId    String?      // provider-side request id, where applicable
+  idempotencyKey String?     @unique
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project       Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([status, kind, scheduledFor])
+  @@index([userId, kind, status])
+  @@index([projectId, kind])
+}
+
+// =============================================================================
+// Exports & publish targets
+// =============================================================================
+
+model Export {
+  id             String       @id @default(cuid())
+  projectId      String
+  userId         String
+  format         ExportFormat @default(MP4_H264)
+  resolutionW    Int          @default(1080)
+  resolutionH    Int          @default(1920)
+  fps            Int          @default(30)
+  bitrateKbps    Int?
+  durationMs     Int?
+  sizeBytes      BigInt?
+  s3Bucket       String?
+  s3Key          String?
+  downloadUrl    String?      @db.Text // signed CloudFront URL
+  expiresAt      DateTime?
+  status         ExportStatus @default(QUEUED)
+  progress       Float        @default(0)
+  errorMessage   String?
+  watermark      Boolean      @default(false)
+  jobId          String?      // AiJob.id reference
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  completedAt    DateTime?
+
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publishJobs    PublishJob[]
+
+  @@index([userId, status, createdAt])
+  @@index([projectId])
+  @@index([status, expiresAt])
+}
+
+model PublishTarget {
+  id                  String          @id @default(cuid())
+  userId              String
+  provider            PublishProvider
+  providerAccountId   String
+  displayName         String?
+  accessTokenEnc      String          @db.Text // AES-256-GCM ciphertext
+  refreshTokenEnc     String?         @db.Text
+  scopesJson          Json            @default("[]")
+  expiresAt           DateTime?
+  revokedAt           DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publishJobs         PublishJob[]
+
+  @@unique([provider, providerAccountId])
+  @@index([userId, provider])
+}
+
+model PublishJob {
+  id                String         @id @default(cuid())
+  exportId          String
+  targetId          String
+  projectId         String
+  status            PublishStatus  @default(QUEUED)
+  providerVideoId   String?
+  providerUrl       String?
+  errorMessage      String?
+  metadataJson      Json           @default("{}")
+  publishedAt       DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  export            Export         @relation(fields: [exportId], references: [id], onDelete: Cascade)
+  target            PublishTarget  @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  project           Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([projectId])
+}
+
+// =============================================================================
+// Templates
+// =============================================================================
+
+model Template {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  title           String
+  description     String?
+  category        String   // listicle, story, ranking, commentary, ...
+  thumbnailKey    String?
+  previewKey      String?  // video preview
+  blueprintJson   Json     // pre-filled tracks, clips, prompts
+  requiredPlan    PlanCode @default(FREE)
+  popularity      Int      @default(0)
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  projects        Project[]
+
+  @@index([category, publishedAt])
+  @@index([popularity])
+}
+
+// =============================================================================
+// Billing
+// =============================================================================
+
+model Plan {
+  id                    String          @id @default(cuid())
+  code                  PlanCode        @unique
+  name                  String
+  description           String?
+  monthlyPriceCents     Int             @default(0)
+  annualPriceCents      Int             @default(0)
+  currency              String          @default("usd")
+  stripeProductId       String?
+  stripePriceMonthlyId  String?
+  stripePriceAnnualId   String?
+  trialDays             Int             @default(0)
+  limitsJson            Json            // { videosPerMonth, voiceoverChars, transcriptionMinutes, ... }
+  featuresJson          Json            @default("[]") // marketing copy bullet points
+  highlight             Boolean         @default(false) // "Most popular"
+  sortOrder             Int             @default(0)
+  publishedAt           DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  subscriptions         Subscription[]
+
+  @@index([publishedAt, sortOrder])
+}
+
+model Subscription {
+  id                     String              @id @default(cuid())
+  userId                 String
+  planId                 String
+  stripeCustomerId       String
+  stripeSubscriptionId   String              @unique
+  status                 SubscriptionStatus
+  interval               BillingInterval     @default(MONTH)
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  cancelAtPeriodEnd      Boolean             @default(false)
+  canceledAt             DateTime?
+  trialEndsAt            DateTime?
+  endedAt                DateTime?
+  defaultPaymentMethod   String?
+  metadataJson           Json                @default("{}")
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  user                   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                   Plan                @relation(fields: [planId], references: [id], onDelete: Restrict)
+  invoices               Invoice[]
+
+  @@index([userId, status])
+  @@index([status, currentPeriodEnd])
+}
+
+model Invoice {
+  id                   String         @id @default(cuid())
+  subscriptionId       String?
+  userId               String
+  stripeInvoiceId      String         @unique
+  number               String?
+  amountCents          Int
+  taxCents             Int            @default(0)
+  currency             String         @default("usd")
+  status               InvoiceStatus
+  hostedInvoiceUrl     String?        @db.Text
+  invoicePdfUrl        String?        @db.Text
+  periodStart          DateTime
+  periodEnd            DateTime
+  paidAt               DateTime?
+  createdAt            DateTime       @default(now())
+
+  subscription         Subscription?  @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  user                 User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([subscriptionId])
+}
+
+model UsageRecord {
+  id           String     @id @default(cuid())
+  userId       String
+  kind         UsageKind
+  periodStart  DateTime
+  periodEnd    DateTime
+  used         BigInt     @default(0)
+  limit        BigInt     // copy of the plan limit at the time
+  updatedAt    DateTime   @updatedAt
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind, periodStart])
+  @@index([userId, periodEnd])
+}
+
+// =============================================================================
+// Notifications, audit, support
+// =============================================================================
+
+model Notification {
+  id           String             @id @default(cuid())
+  userId       String
+  kind         NotificationKind
+  title        String
+  body         String?
+  link         String?
+  metadataJson Json               @default("{}")
+  readAt       DateTime?
+  createdAt    DateTime           @default(now())
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model AuditLog {
+  id           BigInt   @id @default(autoincrement())
+  actorId      String?  // null for system actions
+  action       String   // e.g. "project.delete", "subscription.cancel"
+  targetType   String?
+  targetId     String?
+  ip           String?
+  userAgent    String?
+  metaJson     Json     @default("{}")
+  createdAt    DateTime @default(now())
+
+  actor        User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+}
+
+model SupportTicket {
+  id              String          @id @default(cuid())
+  userId          String
+  subject         String
+  status          TicketStatus    @default(OPEN)
+  priority        TicketPriority  @default(NORMAL)
+  category        String?
+  lastMessageAt   DateTime        @default(now())
+  closedAt        DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages        TicketMessage[]
+
+  @@index([status, priority, lastMessageAt])
+  @@index([userId])
+}
+
+model TicketMessage {
+  id          String        @id @default(cuid())
+  ticketId    String
+  authorId    String
+  body        String        @db.Text
+  internal    Boolean       @default(false) // admin-only note
+  attachmentsJson Json      @default("[]") // S3 keys
+  createdAt   DateTime      @default(now())
+
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author      User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+}
+
+model AbuseReport {
+  id           String        @id @default(cuid())
+  reporterId   String?       // null = anonymous external report
+  projectId    String?
+  targetType   String        // "project", "voice", "user"
+  targetId     String
+  reason       AbuseReason
+  description  String?       @db.Text
+  status       AbuseStatus   @default(RECEIVED)
+  contactEmail String?
+  resolvedById String?
+  resolutionNote String?     @db.Text
+  resolvedAt   DateTime?
+  createdAt    DateTime      @default(now())
+
+  reporter     User?         @relation("ReportFiler", fields: [reporterId], references: [id], onDelete: SetNull)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+}
+
+// =============================================================================
+// Webhooks, feature flags
+// =============================================================================
+
+model WebhookDelivery {
+  id            BigInt         @id @default(autoincrement())
+  source        WebhookSource
+  externalId    String         // provider event id (for idempotency)
+  eventType     String
+  payloadJson   Json
+  signature     String?
+  status        WebhookStatus  @default(RECEIVED)
+  attempts      Int            @default(0)
+  errorMessage  String?
+  receivedAt    DateTime       @default(now())
+  processedAt   DateTime?
+
+  @@unique([source, externalId])
+  @@index([status, receivedAt])
+}
+
+model FeatureFlag {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  description   String?
+  defaultOn     Boolean  @default(false)
+  rolloutPercent Int     @default(0) // 0..100
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+}

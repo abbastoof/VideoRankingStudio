@@ -1,0 +1,56 @@
+{
+  "name": "videorankingstudio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered short-form video creation platform — monorepo root",
+  "packageManager": "pnpm@9.4.0",
+  "engines": {
+    "node": ">=20.11.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf node_modules .turbo",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\" --ignore-path .gitignore",
+    "db:generate": "pnpm --filter @vrs/db generate",
+    "db:migrate": "pnpm --filter @vrs/db migrate",
+    "db:migrate:deploy": "pnpm --filter @vrs/db migrate:deploy",
+    "db:seed": "pnpm --filter @vrs/db seed",
+    "db:studio": "pnpm --filter @vrs/db studio",
+    "db:reset": "pnpm --filter @vrs/db reset",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f",
+    "infra:reset": "docker compose down -v && docker compose up -d",
+    "prepare": "husky install || true"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "husky": "^9.0.11",
+    "lint-staged": "^15.2.2",
+    "prettier": "^3.2.5",
+    "prettier-plugin-tailwindcss": "^0.5.14",
+    "turbo": "^1.13.2",
+    "typescript": "^5.4.5"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md,yml,yaml,css}": [
+      "prettier --write"
+    ],
+    "*.py": [
+      "ruff format",
+      "ruff check --fix"
+    ]
+  }
+}
