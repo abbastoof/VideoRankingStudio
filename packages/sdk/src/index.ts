@@ -272,6 +272,74 @@ export class VrsClient {
     return this.request<Template & { blueprintJson: Record<string, unknown> }>('GET', `/v1/templates/${slug}`);
   }
 
+  // ────── Insights ──────
+  insightsOverview(days = 30) {
+    return this.request<{
+      rangeDays: number;
+      projectCount: number;
+      exportCount: number;
+      avgExportSeconds: number;
+      aiJobsByKind: Array<{ kind: string; count: number }>;
+      exportsByDay: Array<{ day: string; count: number }>;
+      topProjects: Array<{ id: string; title: string; exports: number }>;
+    }>('GET', '/v1/insights/overview', { query: { days } });
+  }
+
+  // ────── Admin ──────
+  adminMetrics() {
+    return this.request<{
+      totalUsers: number;
+      activeUsersLast30Days: number;
+      paidUsers: number;
+      mrrCents: number;
+      exportsLast24h: number;
+      jobBacklog: number;
+    }>('GET', '/v1/admin/metrics');
+  }
+  adminListUsers(query?: {
+    cursor?: string;
+    limit?: number;
+    search?: string;
+    role?: 'USER' | 'ADMIN' | 'SUPPORT';
+    status?: 'ACTIVE' | 'SUSPENDED' | 'PENDING_DELETION';
+    planCode?: 'FREE' | 'CREATOR' | 'BUSINESS' | 'ENTERPRISE';
+  }) {
+    return this.request<Page<Record<string, unknown>>>('GET', '/v1/admin/users', { query });
+  }
+  adminGetUser(id: string) {
+    return this.request<Record<string, unknown>>('GET', `/v1/admin/users/${id}`);
+  }
+  adminUpdateUser(
+    id: string,
+    body: {
+      role?: 'USER' | 'ADMIN' | 'SUPPORT';
+      status?: 'ACTIVE' | 'SUSPENDED' | 'PENDING_DELETION';
+    },
+  ) {
+    return this.request('PATCH', `/v1/admin/users/${id}`, { body });
+  }
+  adminRevokeUserSessions(id: string) {
+    return this.request<{ ok: true }>('POST', `/v1/admin/users/${id}/revoke-sessions`);
+  }
+  adminListSubscriptions() {
+    return this.request<Page<Record<string, unknown>>>('GET', '/v1/admin/subscriptions');
+  }
+  adminListAbuseReports() {
+    return this.request<Page<Record<string, unknown>>>('GET', '/v1/admin/abuse-reports');
+  }
+  adminListTickets() {
+    return this.request<Page<Record<string, unknown>>>('GET', '/v1/admin/tickets');
+  }
+  adminListFlags() {
+    return this.request<Page<Record<string, unknown>>>('GET', '/v1/admin/flags');
+  }
+  adminUpdateFlag(id: string, body: { defaultOn?: boolean; rolloutPercent?: number }) {
+    return this.request('PATCH', `/v1/admin/flags/${id}`, { body });
+  }
+  adminAuditLog(query?: { actorId?: string; action?: string; cursor?: string; limit?: number }) {
+    return this.request<Page<Record<string, unknown>>>('GET', '/v1/admin/audit', { query });
+  }
+
   // ────── Billing ──────
   listPlans() {
     return this.request<Page<Plan>>('GET', '/v1/billing/plans');

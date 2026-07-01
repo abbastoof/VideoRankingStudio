@@ -12,11 +12,13 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { env } from './config/env';
 import { logger } from './lib/logger';
 import { errorHandler } from './middleware/error';
+import { adminRoutes } from './routes/admin.routes';
 import { assetsRoutes } from './routes/assets.routes';
 import { authRoutes } from './routes/auth.routes';
 import { billingRoutes } from './routes/billing.routes';
 import { generationRoutes } from './routes/generation.routes';
 import { healthRoutes } from './routes/health.routes';
+import { insightsRoutes } from './routes/insights.routes';
 import { internalRoutes } from './routes/internal.routes';
 import { projectsRoutes } from './routes/projects.routes';
 import { templatesRoutes } from './routes/templates.routes';
@@ -86,6 +88,8 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(templatesRoutes, { prefix: '/v1' });
   await app.register(voicesRoutes, { prefix: '/v1' });
   await app.register(billingRoutes, { prefix: '/v1' });
+  await app.register(adminRoutes, { prefix: '/v1' });
+  await app.register(insightsRoutes, { prefix: '/v1' });
   await app.register(internalRoutes, { prefix: '/v1' });
   await app.register(wsRoutes, { prefix: '/v1' });
 

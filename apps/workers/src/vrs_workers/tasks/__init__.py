@@ -12,6 +12,7 @@ from . import (
     export_render,
     thumbnails,
     video_gen,
+    voice_clone,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "export_render",
     "thumbnails",
     "video_gen",
+    "voice_clone",
 ]

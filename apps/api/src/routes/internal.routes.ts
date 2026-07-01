@@ -265,6 +265,54 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
     durationMs: z.number().int().nullable().optional(),
   });
 
+  // Asset lookup for internal workers (voice-clone, etc.)
+  app.get('/internal/assets/:id', {
+    schema: { tags: ['internal'], params: z.object({ id: z.string() }) },
+    handler: async (req) => {
+      const { id } = z.object({ id: z.string() }).parse(req.params);
+      const a = await prisma.asset.findUnique({ where: { id } });
+      if (!a) throw Errors.notFound('Asset');
+      return {
+        id: a.id,
+        s3Bucket: a.s3Bucket,
+        s3Key: a.s3Key,
+        kind: a.kind,
+        mimeType: a.mimeType,
+      };
+    },
+  });
+
+  // Voice-clone completion callback
+  app.post('/internal/voices/:id/trained', {
+    schema: {
+      tags: ['internal'],
+      params: z.object({ id: z.string() }),
+      body: z.object({
+        provider: z.enum(['ELEVENLABS', 'AZURE', 'POLLY', 'COQUI', 'PLAYHT', 'INTERNAL']),
+        providerVoiceId: z.string(),
+      }),
+    },
+    handler: async (req) => {
+      const { id } = z.object({ id: z.string() }).parse(req.params);
+      const body = z
+        .object({
+          provider: z.enum(['ELEVENLABS', 'AZURE', 'POLLY', 'COQUI', 'PLAYHT', 'INTERNAL']),
+          providerVoiceId: z.string(),
+        })
+        .parse(req.body);
+      await prisma.voice.update({
+        where: { id },
+        data: {
+          status: 'READY',
+          provider: body.provider,
+          providerVoiceId: body.providerVoiceId,
+          trainingProgress: 1,
+        },
+      });
+      return { ok: true };
+    },
+  });
+
   app.post('/internal/exports/:id/done', {
     schema: {
       tags: ['internal'],

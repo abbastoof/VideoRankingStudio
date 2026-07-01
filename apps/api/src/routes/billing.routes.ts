@@ -19,6 +19,7 @@ import { getStripe } from '../config/stripe';
 import { Errors } from '../lib/errors';
 import { logger } from '../lib/logger';
 import { requireAuth } from '../middleware/auth';
+import { audit } from '../services/audit.service';
 import * as billing from '../services/billing.service';
 import * as usage from '../services/usage.service';
 
@@ -134,6 +135,14 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
         successUrl: body.successUrl,
         cancelUrl: body.cancelUrl,
       });
+      audit({
+        actorId: req.auth!.sub,
+        action: 'billing.checkout.started',
+        targetType: 'plan',
+        targetId: body.planCode,
+        ip: req.ip,
+        meta: { interval: body.interval },
+      });
       return { checkoutUrl };
     },
   });
@@ -164,6 +173,12 @@ export async function billingRoutes(app: FastifyInstance): Promise<void> {
     handler: async (req) => {
       const body = cancelSubscriptionSchema.parse(req.body);
       await billing.cancelActiveSubscription(req.auth!.sub, body.immediate);
+      audit({
+        actorId: req.auth!.sub,
+        action: 'billing.subscription.canceled',
+        ip: req.ip,
+        meta: { immediate: body.immediate, reason: body.reason ?? null },
+      });
       return { ok: true as const };
     },
   });

@@ -14,6 +14,7 @@ import { prisma } from '../config/db';
 import { env } from '../config/env';
 import { Errors } from '../lib/errors';
 import { requireAuth } from '../middleware/auth';
+import { audit } from '../services/audit.service';
 import {
   findOrCreateUserByEmail,
   issueSession,
@@ -51,6 +52,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         ip: req.ip,
         userAgent: req.headers['user-agent'],
       });
+      audit({
+        action: 'auth.otp.requested',
+        targetType: 'email',
+        targetId: body.email,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'] ?? null,
+        meta: { purpose: body.purpose },
+      });
       return {
         delivered: true,
         expiresInSeconds: result.expiresInSeconds,
@@ -81,6 +90,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const session = await issueSession(user, {
         ip: req.ip,
         userAgent: req.headers['user-agent'],
+      });
+      audit({
+        actorId: user.id,
+        action: 'auth.signed_in',
+        targetType: 'session',
+        targetId: session.sessionId,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'] ?? null,
       });
 
       reply.setCookie(env.SESSION_COOKIE_NAME, session.accessToken, cookieOpts(env.JWT_ACCESS_TTL_SECONDS));
