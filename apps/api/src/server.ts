@@ -25,6 +25,7 @@ import { internalRoutes } from './routes/internal.routes';
 import { notificationsRoutes } from './routes/notifications.routes';
 import { projectsRoutes } from './routes/projects.routes';
 import { publishRoutes } from './routes/publish.routes';
+import { rankingRoutes } from './routes/ranking.routes';
 import { supportRoutes } from './routes/support.routes';
 import { templatesRoutes } from './routes/templates.routes';
 import { timelineRoutes } from './routes/timeline.routes';
@@ -96,6 +97,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(voicesRoutes, { prefix: '/v1' });
   await app.register(billingRoutes, { prefix: '/v1' });
   await app.register(publishRoutes, { prefix: '/v1' });
+  await app.register(rankingRoutes, { prefix: '/v1' });
   await app.register(supportRoutes, { prefix: '/v1' });
   await app.register(notificationsRoutes, { prefix: '/v1' });
   await app.register(adminRoutes, { prefix: '/v1' });

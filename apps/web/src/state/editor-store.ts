@@ -84,6 +84,7 @@ export interface EditorState {
   addClipToVideoTrack: (clip: Omit<EditorClip, 'id'>) => void; // backwards-compat
   replaceClip: (clip: EditorClip) => void;
   createTrack: (kind: EditorTrack['kind']) => EditorTrack;
+  removeTrack: (trackId: string) => void;
   toggleTrackMuted: (trackId: string) => void;
   toggleTrackLocked: (trackId: string) => void;
 
@@ -343,6 +344,23 @@ export const useEditorStore = create<EditorState>()(
         dirty: true,
       }));
       return track;
+    },
+
+    removeTrack: (trackId) => {
+      set((prev) => {
+        const track = prev.tracks.find((t) => t.id === trackId);
+        if (!track) return prev;
+        const cmd: Command = { type: 'DELETE_TRACK', track, index: prev.tracks.indexOf(track) };
+        return {
+          tracks: prev.tracks.filter((t) => t.id !== trackId),
+          history: push(prev.history, cmd),
+          selectedTrackId: prev.selectedTrackId === trackId ? null : prev.selectedTrackId,
+          selectedClipId: track.clips.some((c) => c.id === prev.selectedClipId)
+            ? null
+            : prev.selectedClipId,
+          dirty: true,
+        };
+      });
     },
 
     toggleTrackMuted: (trackId) => {

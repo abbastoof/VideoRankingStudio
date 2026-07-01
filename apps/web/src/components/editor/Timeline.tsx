@@ -1,7 +1,7 @@
 'use client';
 
-import { Lock, Mic2, Music, Type, Video } from 'lucide-react';
-import { useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react';
+import { Lock, LockOpen, Mic2, Music, Plus, Trash2, Type, Video, Volume2, VolumeX } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 import { cn } from '@vrs/ui';
 
@@ -18,6 +18,7 @@ export function Timeline() {
   const selectedClipId = useEditorStore((s) => s.selectedClipId);
   const setPlayhead = useEditorStore((s) => s.setPlayhead);
   const totalMs = useEditorStore(selectTimelineDurationMs);
+  const createTrack = useEditorStore((s) => s.createTrack);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const widthPx = (Math.max(totalMs, 30_000) / 1000) * pxPerSecond + 200;
@@ -29,9 +30,14 @@ export function Timeline() {
     setPlayhead((x / pxPerSecond) * 1000);
   }
 
+  const sortedTracks = useMemo(
+    () => tracks.slice().sort((a, b) => trackKindWeight(a.kind) - trackKindWeight(b.kind)),
+    [tracks],
+  );
+
   return (
     <div className="border-t border-border bg-surface-muted/40 select-none">
-      <div ref={scrollRef} className="overflow-x-auto overflow-y-hidden" style={{ maxHeight: 320 }}>
+      <div ref={scrollRef} className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 340 }}>
         <div style={{ width: widthPx + HEADER_WIDTH, position: 'relative' }}>
           <Ruler
             widthPx={widthPx}
@@ -40,22 +46,75 @@ export function Timeline() {
           />
           <Playhead
             offsetPx={HEADER_WIDTH + (playheadMs / 1000) * pxPerSecond}
-            heightPx={tracks.length * TRACK_HEIGHT + RULER_HEIGHT}
+            heightPx={tracks.length * TRACK_HEIGHT + RULER_HEIGHT + 40}
           />
-          {tracks
-            .slice()
-            .sort((a, b) => trackKindWeight(a.kind) - trackKindWeight(b.kind))
-            .map((t) => (
-              <TrackLane
-                key={t.id}
-                track={t}
-                widthPx={widthPx}
-                pxPerSecond={pxPerSecond}
-                selectedClipId={selectedClipId}
-              />
-            ))}
+          {sortedTracks.map((t) => (
+            <TrackLane
+              key={t.id}
+              track={t}
+              widthPx={widthPx}
+              pxPerSecond={pxPerSecond}
+              selectedClipId={selectedClipId}
+            />
+          ))}
+          <AddTrackRow widthPx={widthPx} onAdd={createTrack} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function AddTrackRow({
+  widthPx,
+  onAdd,
+}: {
+  widthPx: number;
+  onAdd: (kind: EditorTrack['kind']) => EditorTrack;
+}) {
+  const [open, setOpen] = useState(false);
+  const kinds: Array<{ value: EditorTrack['kind']; label: string; icon: typeof Video }> = [
+    { value: 'VIDEO', label: 'Video / split-screen', icon: Video },
+    { value: 'OVERLAY', label: 'Overlay / picture-in-picture', icon: Type },
+    { value: 'AUDIO', label: 'Audio / music', icon: Music },
+    { value: 'CAPTION', label: 'Captions', icon: Type },
+  ];
+  return (
+    <div className="flex border-t border-border" style={{ height: 40 }}>
+      <div
+        className="bg-surface border-r border-border px-3 flex items-center relative"
+        style={{ width: HEADER_WIDTH }}
+      >
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex items-center gap-1 text-xs font-medium text-brand-700 hover:text-brand-800"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add track
+        </button>
+        {open ? (
+          <ul
+            role="menu"
+            className="absolute left-2 top-9 z-30 w-56 rounded-md border border-border bg-surface-raised shadow-floating"
+          >
+            {kinds.map((k) => (
+              <li key={k.value}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onAdd(k.value);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-xs hover:bg-surface-muted"
+                >
+                  <k.icon className="h-3.5 w-3.5 text-muted-foreground" />
+                  {k.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      <div className="flex-1 bg-background/60" style={{ width: widthPx }} />
     </div>
   );
 }
@@ -152,17 +211,57 @@ function TrackLane({
 
 function TrackHeader({ track }: { track: EditorTrack }) {
   const Icon = trackIcon(track.kind);
+  const toggleMuted = useEditorStore((s) => s.toggleTrackMuted);
+  const toggleLocked = useEditorStore((s) => s.toggleTrackLocked);
+  const removeTrack = useEditorStore((s) => s.removeTrack);
   return (
     <div
-      className="bg-surface border-r border-border flex items-center gap-2 px-3"
+      className="bg-surface border-r border-border flex items-center gap-2 px-3 group"
       style={{ width: HEADER_WIDTH }}
     >
-      <Icon className="h-4 w-4 text-muted-foreground" />
+      <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium capitalize truncate">{track.kind.toLowerCase()}</p>
         <p className="text-2xs text-muted-foreground">Track {track.index + 1}</p>
       </div>
-      {track.locked ? <Lock className="h-3 w-3 text-muted-foreground" /> : null}
+      <div className="flex items-center gap-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
+        <button
+          type="button"
+          onClick={() => toggleMuted(track.id)}
+          aria-label={track.muted ? 'Unmute track' : 'Mute track'}
+          className="p-1 rounded hover:bg-surface-muted"
+        >
+          {track.muted ? (
+            <VolumeX className="h-3 w-3 text-danger" />
+          ) : (
+            <Volume2 className="h-3 w-3 text-muted-foreground" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleLocked(track.id)}
+          aria-label={track.locked ? 'Unlock track' : 'Lock track'}
+          className="p-1 rounded hover:bg-surface-muted"
+        >
+          {track.locked ? (
+            <Lock className="h-3 w-3 text-brand-600" />
+          ) : (
+            <LockOpen className="h-3 w-3 text-muted-foreground" />
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (confirm(`Delete this ${track.kind.toLowerCase()} track and all its clips?`)) {
+              removeTrack(track.id);
+            }
+          }}
+          aria-label="Remove track"
+          className="p-1 rounded hover:bg-surface-muted hover:text-danger"
+        >
+          <Trash2 className="h-3 w-3 text-muted-foreground" />
+        </button>
+      </div>
     </div>
   );
 }

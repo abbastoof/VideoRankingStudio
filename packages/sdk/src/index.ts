@@ -411,6 +411,107 @@ export class VrsClient {
     >('GET', '/v1/publish/jobs', { query });
   }
 
+  // ────── External stats ──────
+  externalStats() {
+    return this.request<
+      Page<{
+        publishJobId: string;
+        projectId: string;
+        provider: string;
+        providerVideoId: string | null;
+        providerUrl: string | null;
+        title: string;
+        publishedAt: string | null;
+        views: number | null;
+        likes: number | null;
+        comments: number | null;
+        fetchedAt: string | null;
+      }>
+    >('GET', '/v1/insights/external');
+  }
+  refreshExternalStats() {
+    return this.request<{ updated: number }>('POST', '/v1/insights/external/refresh');
+  }
+
+  // ────── Rankings ──────
+  createRanking(body: {
+    title: string;
+    aspectRatio?: 'R9_16' | 'R16_9' | 'R1_1' | 'R4_5';
+    order?: 'asc' | 'desc';
+  }) {
+    return this.request<{ id: string; title: string }>('POST', '/v1/rankings', { body });
+  }
+  getRanking(id: string) {
+    return this.request<{
+      projectId: string;
+      title: string;
+      aspectRatio: string;
+      order: 'asc' | 'desc';
+      headerText: string | null;
+      brandColor: string | null;
+      reveal: 'countdown' | 'topfirst';
+      candidates: Array<{
+        id: string;
+        title: string;
+        subtitle: string | null;
+        score: number;
+        assetId: string | null;
+        thumbnailKey: string | null;
+        sourceUrl: string | null;
+        thumbnailUrl: string | null;
+      }>;
+    }>('GET', `/v1/rankings/${id}`);
+  }
+  updateRanking(
+    id: string,
+    body: {
+      order?: 'asc' | 'desc';
+      headerText?: string | null;
+      brandColor?: string | null;
+      reveal?: 'countdown' | 'topfirst';
+    },
+  ) {
+    return this.request('PATCH', `/v1/rankings/${id}`, { body });
+  }
+  addRankingCandidate(
+    id: string,
+    body: {
+      title: string;
+      subtitle?: string | null;
+      score: number;
+      assetId?: string | null;
+      thumbnailKey?: string | null;
+      sourceUrl?: string | null;
+    },
+  ) {
+    return this.request<{ id: string }>('POST', `/v1/rankings/${id}/candidates`, { body });
+  }
+  updateRankingCandidate(
+    id: string,
+    candidateId: string,
+    body: {
+      title?: string;
+      subtitle?: string | null;
+      score?: number;
+      assetId?: string | null;
+      thumbnailKey?: string | null;
+      sourceUrl?: string | null;
+    },
+  ) {
+    return this.request('PATCH', `/v1/rankings/${id}/candidates/${candidateId}`, { body });
+  }
+  deleteRankingCandidate(id: string, candidateId: string) {
+    return this.request<void>('DELETE', `/v1/rankings/${id}/candidates/${candidateId}`);
+  }
+  reorderRankingCandidates(id: string, orderedIds: string[]) {
+    return this.request<{ ok: true }>('POST', `/v1/rankings/${id}/candidates/reorder`, {
+      body: { orderedIds },
+    });
+  }
+  bakeRanking(id: string) {
+    return this.request<{ ok: true }>('POST', `/v1/rankings/${id}/bake`);
+  }
+
   // ────── Notifications ──────
   listNotifications(query?: { cursor?: string; limit?: number; unreadOnly?: boolean }) {
     return this.request<

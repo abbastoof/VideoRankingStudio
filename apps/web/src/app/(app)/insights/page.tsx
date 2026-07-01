@@ -2,6 +2,7 @@ import { BarChart3, Clock, FileVideo, Sparkles } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@vrs/ui';
 
+import { ExternalStatsPanel } from '@/components/insights/ExternalStatsPanel';
 import { serverClient } from '@/lib/sdk';
 
 export const dynamic = 'force-dynamic';
@@ -73,6 +74,10 @@ export default async function InsightsPage({ searchParams }: PageProps) {
             <HorizontalBars data={overview.aiJobsByKind.map((k) => ({ label: prettyKind(k.kind), value: k.count }))} />
           </CardContent>
         </Card>
+      </section>
+
+      <section>
+        <ExternalStatsPanel />
       </section>
 
       <section>

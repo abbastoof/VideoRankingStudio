@@ -5,6 +5,7 @@ import {
   CreditCard,
   LayoutGrid,
   LifeBuoy,
+  ListOrdered,
   LogOut,
   Mic2,
   Plus,
@@ -32,6 +33,7 @@ interface AppShellProps {
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/projects', label: 'Projects', icon: Video },
+  { href: '/rankings/new', label: 'Rankings', icon: ListOrdered },
   { href: '/templates', label: 'Templates', icon: Sparkles },
   { href: '/voices', label: 'Voices', icon: Mic2 },
   { href: '/insights', label: 'Insights', icon: BarChart3 },

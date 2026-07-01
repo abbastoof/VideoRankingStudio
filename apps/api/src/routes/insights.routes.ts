@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { prisma } from '../config/db';
 import { requireAuth } from '../middleware/auth';
+import { externalStatsForUser, refreshYouTubeStatsForUser } from '../services/youtube-stats.service';
 
 /**
  * Personal analytics for the signed-in user.
@@ -65,6 +66,21 @@ export async function insightsRoutes(app: FastifyInstance): Promise<void> {
         exportsByDay,
         topProjects,
       };
+    },
+  });
+
+  app.get('/insights/external', {
+    schema: { tags: ['insights'] },
+    handler: async (req) => {
+      const items = await externalStatsForUser(req.auth!.sub);
+      return { items, nextCursor: null };
+    },
+  });
+
+  app.post('/insights/external/refresh', {
+    schema: { tags: ['insights'] },
+    handler: async (req) => {
+      return refreshYouTubeStatsForUser(req.auth!.sub);
     },
   });
 }
