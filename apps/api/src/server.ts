@@ -11,6 +11,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 
 import { env } from './config/env';
 import { logger } from './lib/logger';
+import { registerMetrics } from './lib/metrics';
 import { errorHandler } from './middleware/error';
 import { adminRoutes } from './routes/admin.routes';
 import { assetsRoutes } from './routes/assets.routes';
@@ -77,6 +78,7 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   app.setErrorHandler(errorHandler);
 
+  await registerMetrics(app);
   await app.register(healthRoutes);
   await app.register(authRoutes, { prefix: '/v1' });
   await app.register(usersRoutes, { prefix: '/v1' });

@@ -36,6 +36,7 @@
     "pino": "^9.0.0",
     "pino-pretty": "^11.0.0",
     "nodemailer": "^6.9.13",
+    "prom-client": "^15.1.2",
     "stripe": "^15.5.0",
     "zod": "^3.23.4"
   },
