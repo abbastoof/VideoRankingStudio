@@ -1,11 +1,12 @@
 'use client';
 
-import { AlertCircle, ArrowLeft, CheckCircle2, Download, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Download, Loader2, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { Badge, Button, Card, CardContent } from '@vrs/ui';
 
+import { PublishDialog } from '@/components/editor/PublishDialog';
 import { clientSdk } from '@/lib/client-sdk';
 import { connectJobStream } from '@/state/job-stream';
 
@@ -31,6 +32,7 @@ interface ExportRecord {
 export function ExportStatus({ projectId, exportId }: { projectId: string; exportId: string }) {
   const [record, setRecord] = useState<ExportRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [publishOpen, setPublishOpen] = useState(false);
 
   async function refresh() {
     try {
@@ -115,11 +117,26 @@ export function ExportStatus({ projectId, exportId }: { projectId: string; expor
               <a href={record.downloadUrl} download>
                 <Button leftIcon={<Download className="h-4 w-4" />}>Download video</Button>
               </a>
+              <Button
+                variant="outline"
+                leftIcon={<Send className="h-4 w-4" />}
+                onClick={() => setPublishOpen(true)}
+              >
+                Publish
+              </Button>
               <span className="text-xs text-muted-foreground">
                 {formatBytes(record.sizeBytes)} · link expires{' '}
                 {record.expiresAt ? new Date(record.expiresAt).toLocaleDateString() : 'in 7 days'}
               </span>
             </div>
+          ) : null}
+
+          {publishOpen ? (
+            <PublishDialog
+              exportId={record.id}
+              defaultTitle="My new short"
+              onClose={() => setPublishOpen(false)}
+            />
           ) : null}
 
           {failed ? (

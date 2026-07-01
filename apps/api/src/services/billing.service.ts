@@ -200,6 +200,10 @@ async function upsertSubscription(sub: Stripe.Subscription): Promise<void> {
 }
 
 async function markSubscriptionCanceled(sub: Stripe.Subscription): Promise<void> {
+  const rows = await prisma.subscription.findMany({
+    where: { stripeSubscriptionId: sub.id },
+    select: { userId: true },
+  });
   await prisma.subscription.updateMany({
     where: { stripeSubscriptionId: sub.id },
     data: {
@@ -208,6 +212,16 @@ async function markSubscriptionCanceled(sub: Stripe.Subscription): Promise<void>
       endedAt: new Date(),
     },
   });
+  const { notify } = await import('./notifications.service');
+  for (const row of rows) {
+    notify({
+      userId: row.userId,
+      kind: 'SUBSCRIPTION_CANCELED',
+      title: 'Subscription canceled',
+      body: 'Your subscription has ended. You can resubscribe anytime from settings.',
+      link: '/billing',
+    });
+  }
 }
 
 async function recordInvoice(inv: Stripe.Invoice): Promise<void> {
@@ -219,7 +233,8 @@ async function recordInvoice(inv: Stripe.Invoice): Promise<void> {
     : null;
   if (!sub) return;
 
-  await prisma.invoice.upsert({
+  const before = await prisma.invoice.findUnique({ where: { stripeInvoiceId: inv.id } });
+  const after = await prisma.invoice.upsert({
     where: { stripeInvoiceId: inv.id },
     create: {
       subscriptionId: sub.id,
@@ -244,6 +259,29 @@ async function recordInvoice(inv: Stripe.Invoice): Promise<void> {
       paidAt: inv.status === 'paid' ? new Date(inv.status_transitions.paid_at ? inv.status_transitions.paid_at * 1000 : Date.now()) : null,
     },
   });
+
+  const { notify } = await import('./notifications.service');
+  if (after.status === 'PAID' && before?.status !== 'PAID') {
+    notify({
+      userId: sub.userId,
+      kind: 'PAYMENT_SUCCEEDED',
+      title: 'Payment received',
+      body: `Thanks — your ${(after.amountCents / 100).toFixed(2)} ${after.currency.toUpperCase()} invoice is paid.`,
+      link: '/billing',
+    });
+  } else if (
+    (after.status === 'UNCOLLECTIBLE' || inv.status === 'uncollectible' || inv.status === 'open') &&
+    inv.attempt_count && inv.attempt_count > 0 &&
+    before?.status !== after.status
+  ) {
+    notify({
+      userId: sub.userId,
+      kind: 'PAYMENT_FAILED',
+      title: 'Payment failed',
+      body: 'We couldn’t charge your card. Update your payment method to keep your plan active.',
+      link: '/billing',
+    });
+  }
 }
 
 function matchPlanByPrice(priceId?: string): 'CREATOR' | 'BUSINESS' {

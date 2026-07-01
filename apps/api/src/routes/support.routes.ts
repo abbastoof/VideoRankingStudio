@@ -167,6 +167,21 @@ export async function supportRoutes(app: FastifyInstance): Promise<void> {
         targetId: id,
         meta: { internal: msg.internal },
       });
+
+      // Notify the other party when it isn't an internal note.
+      if (!msg.internal) {
+        const { notify } = await import('../services/notifications.service');
+        if (isStaff) {
+          notify({
+            userId: ticket.userId,
+            kind: 'TICKET_REPLY',
+            title: 'Support replied to your ticket',
+            body: ticket.subject,
+            link: `/support/${ticket.id}`,
+          });
+        }
+      }
+
       reply.code(201);
       return { id: msg.id, createdAt: msg.createdAt.toISOString() };
     },

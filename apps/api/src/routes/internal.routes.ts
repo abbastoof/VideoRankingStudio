@@ -335,8 +335,47 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
           completedAt: new Date(),
           expiresAt,
         },
+        include: { project: { select: { title: true } } },
+      });
+      const { notify } = await import('../services/notifications.service');
+      notify({
+        userId: ex.userId,
+        kind: 'EXPORT_READY',
+        title: `"${ex.project.title}" is ready`,
+        body: 'Your export finished rendering. Download or publish it now.',
+        link: `/projects/${ex.projectId}/exports/${ex.id}`,
+      });
+      await prisma.user.update({
+        where: { id: ex.userId },
+        data: { exportsCount: { increment: 1 } },
       });
       return { ok: true, exportId: ex.id };
+    },
+  });
+
+  app.post('/internal/exports/:id/failed', {
+    schema: {
+      tags: ['internal'],
+      params: z.object({ id: z.string() }),
+      body: z.object({ errorMessage: z.string() }),
+    },
+    handler: async (req) => {
+      const { id } = z.object({ id: z.string() }).parse(req.params);
+      const body = z.object({ errorMessage: z.string() }).parse(req.body);
+      const ex = await prisma.export.update({
+        where: { id },
+        data: { status: 'FAILED', errorMessage: body.errorMessage },
+        include: { project: { select: { title: true } } },
+      });
+      const { notify } = await import('../services/notifications.service');
+      notify({
+        userId: ex.userId,
+        kind: 'EXPORT_FAILED',
+        title: `Export failed: ${ex.project.title}`,
+        body: body.errorMessage,
+        link: `/projects/${ex.projectId}/exports/${ex.id}`,
+      });
+      return { ok: true };
     },
   });
 
@@ -375,6 +414,23 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
           errorMessage: body.errorMessage ?? null,
           publishedAt: body.status === 'PUBLISHED' ? new Date() : null,
         },
+        include: {
+          export: { select: { userId: true } },
+          target: { select: { provider: true } },
+        },
+      });
+      const { notify } = await import('../services/notifications.service');
+      const isSuccess = body.status === 'PUBLISHED';
+      notify({
+        userId: row.export.userId,
+        kind: isSuccess ? 'SYSTEM_ANNOUNCEMENT' : 'SYSTEM_ANNOUNCEMENT',
+        title: isSuccess
+          ? `Published to ${row.target.provider.toLowerCase()}`
+          : `Publish to ${row.target.provider.toLowerCase()} failed`,
+        body: isSuccess
+          ? 'Your video is live. Tap to open it.'
+          : body.errorMessage ?? 'The platform rejected the upload.',
+        link: body.providerUrl ?? '/publish/history',
       });
       return { ok: true, publishJobId: row.id };
     },

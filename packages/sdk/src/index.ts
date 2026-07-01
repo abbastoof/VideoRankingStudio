@@ -411,6 +411,30 @@ export class VrsClient {
     >('GET', '/v1/publish/jobs', { query });
   }
 
+  // ────── Notifications ──────
+  listNotifications(query?: { cursor?: string; limit?: number; unreadOnly?: boolean }) {
+    return this.request<
+      Page<{
+        id: string;
+        kind: string;
+        title: string;
+        body: string | null;
+        link: string | null;
+        readAt: string | null;
+        createdAt: string;
+      }> & { unreadCount: number }
+    >('GET', '/v1/notifications', { query });
+  }
+  markNotificationsRead(ids: string[]) {
+    return this.request<{ ok: true }>('POST', '/v1/notifications/read', { body: { ids } });
+  }
+  markAllNotificationsRead() {
+    return this.request<{ ok: true }>('POST', '/v1/notifications/read-all');
+  }
+  deleteNotification(id: string) {
+    return this.request<void>('DELETE', `/v1/notifications/${id}`);
+  }
+
   // ────── Support tickets ──────
   listTickets() {
     return this.request<

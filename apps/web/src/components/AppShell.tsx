@@ -2,7 +2,6 @@
 
 import {
   BarChart3,
-  Bell,
   CreditCard,
   LayoutGrid,
   LifeBuoy,
@@ -22,6 +21,7 @@ import { Button, cn } from '@vrs/ui';
 import type { SessionUser } from '@vrs/types';
 
 import { Logo } from './Logo';
+import { NotificationBell } from './NotificationBell';
 import { api } from '@/lib/api';
 
 interface AppShellProps {
@@ -123,13 +123,7 @@ export function AppShell({ user, children }: AppShellProps) {
                 New project
               </Button>
             </Link>
-            <button
-              type="button"
-              aria-label="Notifications"
-              className="rounded-md p-2 text-muted-foreground hover:bg-surface-muted hover:text-foreground"
-            >
-              <Bell className="h-4 w-4" />
-            </button>
+            <NotificationBell />
           </div>
         </header>
         <main className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
