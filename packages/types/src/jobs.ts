@@ -48,6 +48,7 @@ export const generateHighlightsSchema = z.object({
   maxClips: z.number().int().min(1).max(40).default(8),
   includeFaceTracking: z.boolean().default(true),
 });
+export type GenerateHighlights = z.infer<typeof generateHighlightsSchema>;
 
 export const generateScriptSchema = z.object({
   topic: z.string().min(1).max(500),
@@ -60,6 +61,7 @@ export const generateScriptSchema = z.object({
     .default('listicle'),
   language: z.string().default('en'),
 });
+export type GenerateScript = z.infer<typeof generateScriptSchema>;
 
 export const rewriteScriptSchema = z.object({
   text: z.string().min(1).max(20_000),
@@ -68,6 +70,7 @@ export const rewriteScriptSchema = z.object({
     .default('clarify'),
   targetLanguage: z.string().optional(),
 });
+export type RewriteScript = z.infer<typeof rewriteScriptSchema>;
 
 export const generateImageSchema = z.object({
   prompt: z.string().min(1).max(2000),
@@ -77,6 +80,7 @@ export const generateImageSchema = z.object({
   count: z.number().int().min(1).max(4).default(1),
   style: z.string().optional(),
 });
+export type GenerateImageInput = z.infer<typeof generateImageSchema>;
 
 export const generateVideoSchema = z.object({
   prompt: z.string().min(1).max(2000),
@@ -85,6 +89,14 @@ export const generateVideoSchema = z.object({
   width: z.number().int().multipleOf(64).default(768),
   height: z.number().int().multipleOf(64).default(1344),
 });
+export type GenerateVideo = z.infer<typeof generateVideoSchema>;
+
+export const generateThumbnailSchema = z.object({
+  assetId: idSchema,
+  atSeconds: z.number().nonnegative().optional(),
+  width: z.number().int().positive().optional(),
+});
+export type GenerateThumbnail = z.infer<typeof generateThumbnailSchema>;
 
 export const jobProgressEventSchema = z.object({
   jobId: idSchema,
@@ -96,3 +108,8 @@ export const jobProgressEventSchema = z.object({
   at: isoDateTimeSchema,
 });
 export type JobProgressEvent = z.infer<typeof jobProgressEventSchema>;
+
+export const enqueueJobResponseSchema = z.object({
+  jobId: idSchema,
+});
+export type EnqueueJobResponse = z.infer<typeof enqueueJobResponseSchema>;

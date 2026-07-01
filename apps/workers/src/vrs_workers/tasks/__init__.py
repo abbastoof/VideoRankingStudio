@@ -11,6 +11,7 @@ from . import (
     import_url,
     export_render,
     thumbnails,
+    video_gen,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "import_url",
     "export_render",
     "thumbnails",
+    "video_gen",
 ]

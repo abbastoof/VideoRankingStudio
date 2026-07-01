@@ -15,11 +15,15 @@ import { errorHandler } from './middleware/error';
 import { assetsRoutes } from './routes/assets.routes';
 import { authRoutes } from './routes/auth.routes';
 import { billingRoutes } from './routes/billing.routes';
+import { generationRoutes } from './routes/generation.routes';
 import { healthRoutes } from './routes/health.routes';
 import { internalRoutes } from './routes/internal.routes';
 import { projectsRoutes } from './routes/projects.routes';
 import { templatesRoutes } from './routes/templates.routes';
+import { timelineRoutes } from './routes/timeline.routes';
 import { uploadsRoutes } from './routes/uploads.routes';
+import { usersRoutes } from './routes/users.routes';
+import { voicesRoutes } from './routes/voices.routes';
 import { wsRoutes } from './routes/ws.routes';
 
 export async function buildServer(): Promise<FastifyInstance> {
@@ -73,10 +77,14 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   await app.register(healthRoutes);
   await app.register(authRoutes, { prefix: '/v1' });
+  await app.register(usersRoutes, { prefix: '/v1' });
   await app.register(projectsRoutes, { prefix: '/v1' });
+  await app.register(timelineRoutes, { prefix: '/v1' });
+  await app.register(generationRoutes, { prefix: '/v1' });
   await app.register(uploadsRoutes, { prefix: '/v1' });
   await app.register(assetsRoutes, { prefix: '/v1' });
   await app.register(templatesRoutes, { prefix: '/v1' });
+  await app.register(voicesRoutes, { prefix: '/v1' });
   await app.register(billingRoutes, { prefix: '/v1' });
   await app.register(internalRoutes, { prefix: '/v1' });
   await app.register(wsRoutes, { prefix: '/v1' });

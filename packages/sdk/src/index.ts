@@ -6,42 +6,53 @@
  */
 
 import type {
+  AiJob,
   Asset,
   AuthSession,
-  CompleteUploadInput,
+  CreateClip,
   CreateProject,
+  CreateTrack,
+  EnqueueJobResponse,
   ErrorCode,
-  Export,
+  GenerateHighlights,
+  GenerateImageInput,
   GenerateScript,
+  GenerateThumbnail,
+  GenerateVideo,
   GenerateVoiceover,
   ImportUrl,
   Invoice,
+  MoveClip,
   OtpRequest,
   OtpRequestResponse,
   OtpVerify,
   Plan,
   ProjectListQuery,
   ProjectSummary,
+  ReorderClips,
   RequestExport,
   RequestTranscription,
-  StartCheckout,
-  StartCheckoutResponse,
+  RewriteScript,
   Subscription,
   Template,
-  Transcript,
+  Timeline,
+  UpdateClip,
+  UpdateProfile,
+  UpdateProject,
+  UpdateTrack,
   UploadInit,
   UploadInitResponse,
-  UpdateProject,
   UsageSummary,
-  Voice,
-  Voiceover,
+  UserProfile,
 } from '@vrs/types';
 
-// Some of the above are aliases not re-exported individually; locally redefine for
-// clarity. Keep these in sync with @vrs/types when fields change.
 type CompleteUploadInput = { assetId: string; sha256?: string };
-type GenerateScript = { topic: string; tone?: string; durationMs?: number; format?: string; language?: string };
-type StartCheckout = { planCode: 'CREATOR' | 'BUSINESS'; interval: 'MONTH' | 'YEAR'; successUrl: string; cancelUrl: string };
+type StartCheckout = {
+  planCode: 'CREATOR' | 'BUSINESS';
+  interval: 'MONTH' | 'YEAR';
+  successUrl: string;
+  cancelUrl: string;
+};
 
 export class SdkError extends Error {
   constructor(
@@ -68,6 +79,28 @@ export interface Page<T> {
   nextCursor: string | null;
 }
 
+export interface ExportSummary {
+  id: string;
+  format: string;
+  resolutionW: number;
+  resolutionH: number;
+  fps: number;
+  durationMs: number | null;
+  sizeBytes: number | null;
+  status: string;
+  progress: number;
+  watermark: boolean;
+  errorMessage: string | null;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface ExportDetail extends ExportSummary {
+  projectId: string;
+  downloadUrl: string | null;
+  expiresAt: string | null;
+}
+
 export class VrsClient {
   constructor(private readonly opts: SdkOptions) {}
 
@@ -88,6 +121,26 @@ export class VrsClient {
     return this.request<AuthSession>('GET', '/v1/auth/session');
   }
 
+  // ────── Users ──────
+  getMe() {
+    return this.request<UserProfile>('GET', '/v1/users/me');
+  }
+  updateMe(body: UpdateProfile) {
+    return this.request<UserProfile>('PATCH', '/v1/users/me', { body });
+  }
+  listSessions() {
+    return this.request<Page<{ id: string; userAgent: string | null; ip: string | null; createdAt: string; lastUsedAt: string; expiresAt: string; current: boolean }>>('GET', '/v1/users/me/sessions');
+  }
+  revokeSession(id: string) {
+    return this.request<void>('DELETE', `/v1/users/me/sessions/${id}`);
+  }
+  revokeAllSessions() {
+    return this.request<{ ok: true }>('POST', '/v1/users/me/sessions/revoke-all');
+  }
+  deleteAccount() {
+    return this.request<void>('DELETE', '/v1/users/me');
+  }
+
   // ────── Projects ──────
   listProjects(query?: Partial<ProjectListQuery>) {
     return this.request<Page<ProjectSummary>>('GET', '/v1/projects', { query });
@@ -96,16 +149,97 @@ export class VrsClient {
     return this.request<ProjectSummary>('POST', '/v1/projects', { body });
   }
   getProject(id: string) {
-    return this.request('GET', `/v1/projects/${id}`);
+    return this.request<ProjectSummary & { description: string | null; scriptText: string | null; settingsJson: Record<string, unknown>; templateId: string | null; updatedAt: string }>('GET', `/v1/projects/${id}`);
   }
   updateProject(id: string, body: UpdateProject) {
     return this.request('PATCH', `/v1/projects/${id}`, { body });
   }
   deleteProject(id: string) {
-    return this.request('DELETE', `/v1/projects/${id}`);
+    return this.request<void>('DELETE', `/v1/projects/${id}`);
   }
   duplicateProject(id: string) {
     return this.request<ProjectSummary>('POST', `/v1/projects/${id}/duplicate`);
+  }
+
+  // ────── Timeline ──────
+  getTimeline(id: string) {
+    return this.request<Timeline & { tracks: Array<{ clips: Array<Record<string, unknown>> }> }>(
+      'GET',
+      `/v1/projects/${id}/timeline`,
+    );
+  }
+  createTrack(id: string, body: CreateTrack) {
+    return this.request('POST', `/v1/projects/${id}/tracks`, { body });
+  }
+  updateTrack(id: string, trackId: string, body: UpdateTrack) {
+    return this.request('PATCH', `/v1/projects/${id}/tracks/${trackId}`, { body });
+  }
+  deleteTrack(id: string, trackId: string) {
+    return this.request<void>('DELETE', `/v1/projects/${id}/tracks/${trackId}`);
+  }
+  createClip(id: string, body: CreateClip) {
+    return this.request('POST', `/v1/projects/${id}/clips`, { body });
+  }
+  updateClip(id: string, clipId: string, body: UpdateClip) {
+    return this.request('PATCH', `/v1/projects/${id}/clips/${clipId}`, { body });
+  }
+  moveClip(id: string, clipId: string, body: MoveClip) {
+    return this.request('POST', `/v1/projects/${id}/clips/${clipId}/move`, { body });
+  }
+  splitClip(id: string, clipId: string, atMs: number) {
+    return this.request('POST', `/v1/projects/${id}/clips/${clipId}/split`, { body: { atMs } });
+  }
+  deleteClip(id: string, clipId: string) {
+    return this.request<void>('DELETE', `/v1/projects/${id}/clips/${clipId}`);
+  }
+  reorderClips(id: string, body: ReorderClips) {
+    return this.request('POST', `/v1/projects/${id}/clips/reorder`, { body });
+  }
+
+  // ────── AI generation ──────
+  generateHighlights(id: string, body: GenerateHighlights) {
+    return this.request<EnqueueJobResponse>('POST', `/v1/projects/${id}/generate/highlights`, { body });
+  }
+  generateTranscription(id: string, body: RequestTranscription) {
+    return this.request<{ transcriptId: string; jobId: string }>('POST', `/v1/projects/${id}/generate/transcribe`, { body });
+  }
+  generateVoiceover(id: string, body: GenerateVoiceover) {
+    return this.request<{ voiceoverId: string; jobId: string }>('POST', `/v1/projects/${id}/generate/voice`, { body });
+  }
+  generateScript(id: string, body: GenerateScript) {
+    return this.request<EnqueueJobResponse>('POST', `/v1/projects/${id}/generate/script`, { body });
+  }
+  rewriteScript(id: string, body: RewriteScript) {
+    return this.request<EnqueueJobResponse>('POST', `/v1/projects/${id}/generate/rewrite`, { body });
+  }
+  generateImage(id: string, body: GenerateImageInput) {
+    return this.request<EnqueueJobResponse>('POST', `/v1/projects/${id}/generate/image`, { body });
+  }
+  generateVideo(id: string, body: GenerateVideo) {
+    return this.request<EnqueueJobResponse>('POST', `/v1/projects/${id}/generate/video`, { body });
+  }
+  generateThumbnail(id: string, body: GenerateThumbnail) {
+    return this.request<{ jobId: string; thumbnailKey: string }>('POST', `/v1/projects/${id}/generate/thumbnail`, { body });
+  }
+  requestExport(id: string, body: RequestExport) {
+    return this.request<{ exportId: string; jobId: string; title: string }>('POST', `/v1/projects/${id}/export`, { body });
+  }
+  listExports(projectId: string) {
+    return this.request<Page<ExportSummary>>('GET', `/v1/projects/${projectId}/exports`);
+  }
+  getExport(exportId: string) {
+    return this.request<ExportDetail>('GET', `/v1/exports/${exportId}`);
+  }
+
+  // ────── Jobs ──────
+  getJob(jobId: string) {
+    return this.request<AiJob>('GET', `/v1/jobs/${jobId}`);
+  }
+  cancelJob(jobId: string) {
+    return this.request<{ ok: true }>('POST', `/v1/jobs/${jobId}/cancel`);
+  }
+  retryJob(jobId: string) {
+    return this.request<EnqueueJobResponse>('POST', `/v1/jobs/${jobId}/retry`);
   }
 
   // ────── Uploads & assets ──────
@@ -126,7 +260,12 @@ export class VrsClient {
   }
 
   // ────── Templates ──────
-  listTemplates(query?: { category?: string; cursor?: string; limit?: number; sortBy?: 'popularity' | 'createdAt' }) {
+  listTemplates(query?: {
+    category?: string;
+    cursor?: string;
+    limit?: number;
+    sortBy?: 'popularity' | 'createdAt';
+  }) {
     return this.request<Page<Template>>('GET', '/v1/templates', { query });
   }
   getTemplate(slug: string) {
@@ -147,7 +286,7 @@ export class VrsClient {
     return this.request<Page<Invoice>>('GET', '/v1/billing/invoices');
   }
   startCheckout(body: StartCheckout) {
-    return this.request<StartCheckoutResponse>('POST', '/v1/billing/checkout', { body });
+    return this.request<{ checkoutUrl: string }>('POST', '/v1/billing/checkout', { body });
   }
   openPortal(body?: { returnUrl?: string }) {
     return this.request<{ portalUrl: string }>('POST', '/v1/billing/portal', { body });
@@ -196,7 +335,9 @@ export class VrsClient {
 
     if (!res.ok) {
       if (res.status === 401) this.opts.onUnauthorized?.();
-      const err = (payload as { error?: { code?: string; message?: string; requestId?: string; details?: unknown } })?.error;
+      const err = (payload as {
+        error?: { code?: string; message?: string; requestId?: string; details?: unknown };
+      })?.error;
       throw new SdkError(
         res.status,
         err?.code ?? 'UNKNOWN_ERROR',

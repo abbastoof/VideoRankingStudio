@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { idSchema } from './common';
 
 export const trackKindSchema = z.enum(['VIDEO', 'AUDIO', 'CAPTION', 'OVERLAY']);
+export type TrackKind = z.infer<typeof trackKindSchema>;
+
 export const clipSourceSchema = z.enum([
   'ASSET',
   'VOICEOVER',
@@ -10,6 +12,7 @@ export const clipSourceSchema = z.enum([
   'GENERATED_VIDEO',
   'TEXT',
 ]);
+export type ClipSource = z.infer<typeof clipSourceSchema>;
 
 export const transformSchema = z.object({
   x: z.number().default(0),
@@ -74,15 +77,64 @@ export const timelineSchema = z.object({
   durationMs: z.number().int().nonnegative(),
   tracks: z.array(trackSchema),
 });
+export type Timeline = z.infer<typeof timelineSchema>;
 
-export const createClipSchema = clipSchema
-  .omit({ id: true, trackId: true })
-  .extend({ trackId: idSchema });
+export const createTrackSchema = z.object({
+  kind: trackKindSchema,
+  index: z.number().int().nonnegative().optional(),
+  volume: z.number().min(0).max(2).optional(),
+});
+export type CreateTrack = z.infer<typeof createTrackSchema>;
+
+export const updateTrackSchema = z.object({
+  muted: z.boolean().optional(),
+  locked: z.boolean().optional(),
+  volume: z.number().min(0).max(2).optional(),
+  index: z.number().int().nonnegative().optional(),
+});
+export type UpdateTrack = z.infer<typeof updateTrackSchema>;
+
+export const createClipSchema = z.object({
+  trackId: idSchema,
+  source: clipSourceSchema,
+  assetId: idSchema.nullable().optional(),
+  voiceoverId: idSchema.nullable().optional(),
+  startMs: z.number().int().nonnegative(),
+  durationMs: z.number().int().positive(),
+  inMs: z.number().int().nonnegative().optional(),
+  outMs: z.number().int().nonnegative().optional(),
+  speed: z.number().positive().optional(),
+  volume: z.number().min(0).max(2).optional(),
+  opacity: z.number().min(0).max(1).optional(),
+  transform: transformSchema.optional(),
+  effects: z.array(clipEffectSchema).optional(),
+  text: clipTextSchema.optional(),
+  isHighlight: z.boolean().optional(),
+});
+export type CreateClip = z.infer<typeof createClipSchema>;
+
 export const updateClipSchema = createClipSchema.partial().omit({ trackId: true });
+export type UpdateClip = z.infer<typeof updateClipSchema>;
 
 export const moveClipSchema = z.object({
   trackId: idSchema.optional(),
   startMs: z.number().int().nonnegative().optional(),
 });
+export type MoveClip = z.infer<typeof moveClipSchema>;
 
 export const splitClipSchema = z.object({ atMs: z.number().int().positive() });
+export type SplitClip = z.infer<typeof splitClipSchema>;
+
+export const reorderClipsSchema = z.object({
+  updates: z
+    .array(
+      z.object({
+        id: idSchema,
+        trackId: idSchema.optional(),
+        startMs: z.number().int().nonnegative().optional(),
+      }),
+    )
+    .min(1)
+    .max(500),
+});
+export type ReorderClips = z.infer<typeof reorderClipsSchema>;

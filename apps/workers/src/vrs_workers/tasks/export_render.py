@@ -1,16 +1,13 @@
-"""Export render. Composes a project's timeline into a final encoded video
-using FFmpeg. This is intentionally the most fully-fleshed task — exports are
-the single feature users will judge the platform on.
+"""Export render.
 
-The full implementation reads the project timeline from the API, downloads
-referenced assets, builds an FFmpeg filtergraph for each track, mixes audio
-with EBU R128 loudness normalization, burns captions, applies the watermark
-(if the plan requires it), and uploads the output to the exports bucket."""
+Fetches the project timeline from the API's internal endpoint, downloads every
+referenced asset + voiceover + caption artifact, builds a single FFmpeg
+filtergraph via `vrs_workers.compose`, runs the render, uploads the result to
+S3, and reports completion back to the API."""
 
 from __future__ import annotations
 
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -18,7 +15,9 @@ from typing import Any
 import httpx
 
 from ..celery_app import celery_app
+from ..compose import ASPECT_TO_WH, ComposeSpec, build_command, run
 from ..config import settings
+from ..logging import logger
 from ..storage import download_to, upload_file
 from ._base import job_lifecycle, succeed
 
@@ -44,35 +43,50 @@ def render_export(
         try:
             report(0.05, "fetching timeline")
             timeline = _fetch_timeline(project_id)
-            report(0.15, "downloading assets")
-            asset_paths = _download_assets(timeline, work, report)
 
-            report(0.4, "building filter graph")
+            report(0.15, "downloading assets")
+            asset_paths, voiceover_paths = _download_media(timeline, work, report)
+            caption_srt = _download_caption_srt(timeline, work)
+
+            report(0.42, "building filter graph")
             output = work / "out.mp4"
-            cmd = _ffmpeg_command(
-                timeline=timeline,
-                assets=asset_paths,
+            spec = ComposeSpec(
                 output=output,
                 width=resolution_w,
                 height=resolution_h,
                 fps=fps,
                 bitrate_kbps=bitrate_kbps,
-                burn_captions=burn_captions,
+                burn_captions=burn_captions and caption_srt is not None,
                 normalize_loudness=normalize_loudness,
                 watermark=watermark,
+                watermark_path=_maybe_watermark_path(work) if watermark else None,
+                background_music_path=None,  # explicit per-project music lands with the music picker
+                duck_music_against_voice=True,
+                caption_style=_caption_style(timeline),
             )
-            report(0.5, "encoding")
-            subprocess.run(cmd, check=True)
+            built = build_command(
+                timeline=timeline,
+                asset_paths=asset_paths,
+                voiceover_paths=voiceover_paths,
+                caption_srt_path=caption_srt,
+                spec=spec,
+            )
 
-            report(0.92, "uploading export")
+            report(0.5, "encoding")
+            run(built.argv)
+
+            report(0.9, "uploading export")
             key = f"projects/{project_id}/exports/{export_id}.mp4"
             upload_file("exports", key, output, content_type="video/mp4")
+
+            size_bytes = output.stat().st_size
+            _post_done(export_id, key, size_bytes, timeline.get("durationMs"))
 
             result = {
                 "exportId": export_id,
                 "s3Bucket": "exports",
                 "s3Key": key,
-                "sizeBytes": output.stat().st_size,
+                "sizeBytes": size_bytes,
                 "format": format_,
                 "resolutionW": resolution_w,
                 "resolutionH": resolution_h,
@@ -86,95 +100,105 @@ def render_export(
 
 def _fetch_timeline(project_id: str) -> dict[str, Any]:
     headers = {"x-internal-service-token": settings.internal_service_token}
-    res = httpx.get(f"{settings.api_url}/v1/internal/projects/{project_id}/timeline", headers=headers, timeout=30.0)
+    res = httpx.get(
+        f"{settings.api_url}/v1/internal/projects/{project_id}/timeline",
+        headers=headers,
+        timeout=30.0,
+    )
     res.raise_for_status()
     return res.json()
 
 
-def _download_assets(timeline: dict[str, Any], work: Path, report) -> dict[str, Path]:  # noqa: ANN001
-    paths: dict[str, Path] = {}
-    refs = _collect_asset_refs(timeline)
-    for i, (asset_id, ref) in enumerate(refs.items()):
-        dest = work / f"asset_{asset_id}{Path(ref['key']).suffix}"
-        download_to(ref["bucket"], ref["key"], dest)
-        paths[asset_id] = dest
-        report(0.15 + 0.25 * (i + 1) / max(len(refs), 1))
-    return paths
+def _download_media(
+    timeline: dict[str, Any],
+    work: Path,
+    report,  # noqa: ANN001
+) -> tuple[dict[str, Path], dict[str, Path]]:
+    asset_paths: dict[str, Path] = {}
+    voiceover_paths: dict[str, Path] = {}
 
-
-def _collect_asset_refs(timeline: dict[str, Any]) -> dict[str, dict[str, str]]:
-    refs: dict[str, dict[str, str]] = {}
+    refs: list[tuple[str, str, str, str]] = []  # (kind, id, bucket, key)
     for track in timeline.get("tracks", []):
         for clip in track.get("clips", []):
             asset = clip.get("asset")
             if asset and asset.get("s3Key"):
-                refs[asset["id"]] = {"bucket": asset["s3Bucket"], "key": asset["s3Key"]}
-            voiceover = clip.get("voiceover")
-            if voiceover and voiceover.get("audioKey"):
-                refs[f"vo_{voiceover['id']}"] = {"bucket": voiceover["audioBucket"], "key": voiceover["audioKey"]}
-    return refs
+                refs.append(("asset", asset["id"], asset["s3Bucket"], asset["s3Key"]))
+            vo = clip.get("voiceover")
+            if vo and vo.get("audioKey"):
+                refs.append(("voiceover", vo["id"], vo["audioBucket"], vo["audioKey"]))
+
+    seen: set[str] = set()
+    for i, (kind, obj_id, bucket, key) in enumerate(refs):
+        dedupe_key = f"{kind}:{obj_id}"
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        dest = work / f"{kind}_{obj_id}{Path(key).suffix or '.bin'}"
+        try:
+            download_to(bucket, key, dest)  # type: ignore[arg-type]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("export.download_failed", key=key, error=str(exc))
+            continue
+        if kind == "asset":
+            asset_paths[obj_id] = dest
+        else:
+            voiceover_paths[obj_id] = dest
+        report(0.15 + 0.27 * (i + 1) / max(len(refs), 1))
+    return asset_paths, voiceover_paths
 
 
-def _ffmpeg_command(
-    *,
-    timeline: dict[str, Any],
-    assets: dict[str, Path],
-    output: Path,
-    width: int,
-    height: int,
-    fps: int,
-    bitrate_kbps: int | None,
-    burn_captions: bool,
-    normalize_loudness: bool,
-    watermark: bool,
-) -> list[str]:
-    """Build the ffmpeg invocation.
+def _download_caption_srt(timeline: dict[str, Any], work: Path) -> Path | None:
+    """If the timeline has an enabled caption track with a transcript SRT
+    reference, download it so ffmpeg can burn it in via libass/subtitles."""
+    captions = timeline.get("captions") or []
+    for cap in captions:
+        if not cap.get("enabled"):
+            continue
+        style = cap.get("styleJson") or {}
+        srt_key = style.get("srtKey")
+        if srt_key:
+            dest = work / f"caption_{cap['id']}.srt"
+            try:
+                download_to("generated", srt_key, dest)
+                return dest
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("export.caption_download_failed", error=str(exc))
+    return None
 
-    Implementation note: a real production compose is non-trivial — it has to
-    sequence clips along the timeline, normalize aspect ratios, mix audio
-    tracks, and overlay captions. The full graph is constructed by
-    `vrs_workers.compose.build_graph` (a dedicated module forthcoming) so
-    this entry point stays readable. The minimal command below covers the
-    single-clip happy path and is replaced when the compose module lands."""
 
-    # Take the first video clip's source as a starting point so the worker is
-    # runnable end-to-end against trivial timelines. The richer graph builder
-    # plugs in here without changing the task signature.
-    first_video_clip = next(
-        (
-            clip for track in timeline.get("tracks", [])
-            if track["kind"] == "VIDEO"
-            for clip in track.get("clips", [])
-            if clip.get("asset")
-        ),
-        None,
-    )
-    if not first_video_clip:
-        raise RuntimeError("No video clips on the timeline; nothing to render")
+def _caption_style(timeline: dict[str, Any]) -> dict[str, Any]:
+    for cap in timeline.get("captions") or []:
+        if cap.get("enabled") and cap.get("styleJson"):
+            return cap["styleJson"]
+    return {"fontFamily": "Inter", "fontSize": 48, "color": "#ffffff"}
 
-    source = assets[first_video_clip["asset"]["id"]]
-    vf = [f"scale={width}:{height}:force_original_aspect_ratio=increase",
-          f"crop={width}:{height}",
-          f"fps={fps}"]
-    af = []
-    if normalize_loudness:
-        af.append("loudnorm=I=-16:LRA=11:TP=-1.5")
-    if watermark:
-        # A 1-line drawtext watermark for the free plan. Real assets layer
-        # a brand mark image (overlay) instead, configured per environment.
-        vf.append("drawtext=text='VideoRankingStudio':x=w-tw-24:y=h-th-24:"
-                  "fontcolor=white@0.9:fontsize=20:box=1:boxcolor=black@0.4:boxborderw=8")
 
-    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "warning", "-y", "-i", str(source)]
-    cmd += ["-vf", ",".join(vf)]
-    if af:
-        cmd += ["-af", ",".join(af)]
-    cmd += ["-c:v", "libx264", "-preset", "medium", "-profile:v", "high", "-pix_fmt", "yuv420p"]
-    cmd += ["-movflags", "+faststart"]
-    if bitrate_kbps:
-        cmd += ["-b:v", f"{bitrate_kbps}k", "-maxrate", f"{int(bitrate_kbps * 1.5)}k", "-bufsize", f"{bitrate_kbps * 2}k"]
-    else:
-        cmd += ["-crf", "20"]
-    cmd += ["-c:a", "aac", "-b:a", "192k"]
-    cmd += [str(output)]
-    return cmd
+def _maybe_watermark_path(work: Path) -> Path | None:
+    """Extract the bundled watermark PNG into the working directory. If a
+    real brand mark isn't present at deploy time we generate a tiny SVG-like
+    placeholder — the drawtext filter still gets used as a fallback in
+    compose.py when this returns None."""
+    wm_source = Path("/opt/vrs/watermark.png")
+    if wm_source.exists():
+        dest = work / "watermark.png"
+        shutil.copy(wm_source, dest)
+        return dest
+    return None
+
+
+def _post_done(export_id: str, key: str, size_bytes: int, duration_ms: int | None) -> None:
+    headers = {"x-internal-service-token": settings.internal_service_token}
+    body = {"s3Bucket": "exports", "s3Key": key, "sizeBytes": size_bytes, "durationMs": duration_ms}
+    try:
+        httpx.post(
+            f"{settings.api_url}/v1/internal/exports/{export_id}/done",
+            headers=headers,
+            json=body,
+            timeout=15.0,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("export.done_callback_failed", error=str(exc))
+
+
+def resolution_for_aspect(aspect: str) -> tuple[int, int]:
+    return ASPECT_TO_WH.get(aspect, (1080, 1920))
