@@ -8,6 +8,9 @@ from celery import Celery
 from kombu import Queue
 
 from .config import settings
+from .tracing import init_tracing
+
+init_tracing()
 
 
 def _make_app() -> Celery:

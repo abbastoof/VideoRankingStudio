@@ -1,0 +1,105 @@
+{
+  "title": "VRS · Billing funnel",
+  "uid": "vrs-billing-funnel",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5m",
+  "time": { "from": "now-30d", "to": "now" },
+  "tags": ["vrs", "billing"],
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Total MRR",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT COALESCE(SUM(CASE WHEN s.\"interval\" = 'MONTH' THEN p.\"monthlyPriceCents\" ELSE p.\"annualPriceCents\" / 12 END), 0) / 100.0 FROM \"Subscription\" s JOIN \"Plan\" p ON p.id = s.\"planId\" WHERE s.\"status\" IN ('ACTIVE','TRIALING')",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "type": "stat",
+      "title": "Active subscriptions",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT COUNT(*) FROM \"Subscription\" WHERE status IN ('ACTIVE','TRIALING')",
+          "refId": "A",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Signups last 30d",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT COUNT(*) FROM \"User\" WHERE \"createdAt\" > NOW() - INTERVAL '30 days'",
+          "refId": "A",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Cancellations last 30d",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT COUNT(*) FROM \"Subscription\" WHERE \"canceledAt\" > NOW() - INTERVAL '30 days'",
+          "refId": "A",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Signups + conversions per day",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT date_trunc('day', \"createdAt\") AS time, 'signups' AS metric, COUNT(*) AS value FROM \"User\" WHERE \"createdAt\" > NOW() - INTERVAL '30 days' GROUP BY 1 UNION ALL SELECT date_trunc('day', \"createdAt\") AS time, 'subscriptions' AS metric, COUNT(*) AS value FROM \"Subscription\" WHERE \"createdAt\" > NOW() - INTERVAL '30 days' GROUP BY 1 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "piechart",
+      "title": "Subscriptions by plan",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT p.code AS metric, COUNT(*) AS value FROM \"Subscription\" s JOIN \"Plan\" p ON p.id = s.\"planId\" WHERE s.status IN ('ACTIVE','TRIALING') GROUP BY p.code",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Failed payments last 7d",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT i.\"createdAt\", u.email, i.\"amountCents\" / 100.0 AS amount, i.status FROM \"Invoice\" i JOIN \"User\" u ON u.id = i.\"userId\" WHERE i.status IN ('OPEN','UNCOLLECTIBLE') AND i.\"createdAt\" > NOW() - INTERVAL '7 days' ORDER BY i.\"createdAt\" DESC LIMIT 25",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

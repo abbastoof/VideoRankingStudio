@@ -1,0 +1,92 @@
+{
+  "title": "VRS · Export pipeline",
+  "uid": "vrs-export-pipeline",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "tags": ["vrs", "exports"],
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Exports last 1h",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT COUNT(*) FROM \"Export\" WHERE \"createdAt\" > NOW() - INTERVAL '1 hour'",
+          "refId": "A",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Failure rate 24h",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT COUNT(*) FILTER (WHERE status='FAILED') * 1.0 / NULLIF(COUNT(*), 0) FROM \"Export\" WHERE \"createdAt\" > NOW() - INTERVAL '24 hours'",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.02 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Median render seconds",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (\"completedAt\" - \"createdAt\"))) FROM \"Export\" WHERE status='COMPLETED' AND \"completedAt\" > NOW() - INTERVAL '24 hours'",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Exports per 15 min",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT date_trunc('minute', \"createdAt\") - (EXTRACT(minute FROM \"createdAt\")::int % 15) * INTERVAL '1 minute' AS time, status, COUNT(*) AS value FROM \"Export\" WHERE \"createdAt\" > NOW() - INTERVAL '24 hours' GROUP BY 1, 2 ORDER BY 1",
+          "format": "time_series",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Recent failures",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 10 },
+      "targets": [
+        {
+          "datasource": "PostgresApp",
+          "rawSql": "SELECT \"id\" AS export_id, \"projectId\" AS project, \"createdAt\", \"errorMessage\" FROM \"Export\" WHERE status='FAILED' ORDER BY \"createdAt\" DESC LIMIT 25",
+          "format": "table",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

@@ -14,8 +14,10 @@ from fastapi import FastAPI
 from .celery_app import celery_app
 from .config import settings
 from .logging import configure_logging, logger
+from .tracing import init_tracing
 
 configure_logging()
+init_tracing()
 logger.info("workers.boot", env=settings.node_env, broker=settings.broker_url)
 
 app = FastAPI(

@@ -202,6 +202,8 @@ export async function requestVoiceover(
 
 export async function requestScript(userId: string, projectId: string, input: GenerateScript) {
   await guardProject(userId, projectId);
+  const { assertPromptAllowed } = await import('./moderation.service');
+  await assertPromptAllowed(input.topic);
   const job = await enqueue({
     userId,
     projectId,
@@ -225,6 +227,8 @@ export async function requestScriptRewrite(
   input: RewriteScript,
 ) {
   await guardProject(userId, projectId);
+  const { assertPromptAllowed } = await import('./moderation.service');
+  await assertPromptAllowed(input.text);
   const job = await enqueue({
     userId,
     projectId,
@@ -245,6 +249,8 @@ export async function requestScriptRewrite(
 export async function requestImage(userId: string, projectId: string, input: GenerateImageInput) {
   await guardProject(userId, projectId);
   await usage.assertWithinLimit(userId, 'IMAGE_GENERATIONS', input.count);
+  const { assertPromptAllowed } = await import('./moderation.service');
+  await assertPromptAllowed(`${input.prompt}\n${input.negativePrompt ?? ''}`);
 
   const job = await enqueue({
     userId,
@@ -281,6 +287,8 @@ export async function requestVideoGeneration(
 ) {
   await guardProject(userId, projectId);
   await usage.assertWithinLimit(userId, 'VIDEO_GENERATIONS', 1);
+  const { assertPromptAllowed } = await import('./moderation.service');
+  await assertPromptAllowed(input.prompt);
 
   const job = await enqueue({
     userId,

@@ -1,0 +1,73 @@
+{
+  "title": "VRS · Infrastructure",
+  "uid": "vrs-infrastructure",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "1m",
+  "time": { "from": "now-6h", "to": "now" },
+  "tags": ["vrs", "infra"],
+  "timezone": "browser",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "ECS service CPU %",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "aws_ecs_cpuutilization_average",
+          "legendFormat": "{{service_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "ECS service memory %",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "aws_ecs_memoryutilization_average",
+          "legendFormat": "{{service_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "RDS CPU + connections",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "aws_rds_cpuutilization_average",
+          "legendFormat": "cpu %",
+          "refId": "A"
+        },
+        {
+          "expr": "aws_rds_database_connections_average",
+          "legendFormat": "connections",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "ElastiCache CPU + memory",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "aws_elasticache_cpuutilization_average",
+          "legendFormat": "cpu %",
+          "refId": "A"
+        },
+        {
+          "expr": "aws_elasticache_bytes_used_for_cache_average / aws_elasticache_maximum_data_bytes_stored * 100",
+          "legendFormat": "memory %",
+          "refId": "B"
+        }
+      ]
+    }
+  ]
+}

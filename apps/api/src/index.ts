@@ -1,11 +1,13 @@
 import { closeRedis } from './config/redis';
 import { logger } from './lib/logger';
+import { initTracing } from './lib/tracing';
 import { buildServer } from './server';
 
 const PORT = Number(process.env.PORT ?? 4000);
 const HOST = process.env.HOST ?? '0.0.0.0';
 
 async function main(): Promise<void> {
+  await initTracing();
   const app = await buildServer();
 
   const shutdown = async (signal: string): Promise<void> => {

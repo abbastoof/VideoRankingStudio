@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 
 import { QueryProvider } from '@/components/QueryProvider';
+import { SentryClientInit } from '@/lib/sentry';
 
 import './globals.css';
 
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} ${mono.variable}`} suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased">
+        <SentryClientInit />
         <QueryProvider>{children}</QueryProvider>
       </body>
     </html>
