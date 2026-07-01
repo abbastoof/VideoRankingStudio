@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 
 import { Button, Card, CardContent, Spinner, cn } from '@vrs/ui';
 
+import { CaptionEditor } from '@/components/editor/CaptionEditor';
 import { clientSdk } from '@/lib/client-sdk';
 import { useEditorStore } from '@/state/editor-store';
 
@@ -283,6 +284,7 @@ function CaptionsPanel({ projectId }: { projectId: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [language, setLanguage] = useState('auto');
+  const [tab, setTab] = useState<'generate' | 'edit'>('generate');
 
   async function run() {
     setBusy(true);
@@ -294,6 +296,7 @@ function CaptionsPanel({ projectId }: { projectId: string }) {
         status: 'QUEUED',
         progress: 0,
       });
+      setTab('edit');
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not start transcription');
     } finally {
@@ -303,34 +306,57 @@ function CaptionsPanel({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-3">
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <Captions className="h-4 w-4 text-brand-700" />
-            <h3 className="text-sm font-semibold">Auto captions</h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Word-level timing in 90+ languages. Edit any word and the burn-in updates instantly.
-          </p>
-          <select
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-            className="w-full h-9 rounded-md border border-border bg-surface-raised px-3 text-sm"
-          >
-            <option value="auto">Detect language</option>
-            <option value="en">English</option>
-            <option value="es">Spanish</option>
-            <option value="fr">French</option>
-            <option value="de">German</option>
-            <option value="pt">Portuguese</option>
-            <option value="ja">Japanese</option>
-          </select>
-          <Button size="sm" fullWidth loading={busy} onClick={run}>
-            Generate captions
-          </Button>
-          {err ? <p className="text-xs text-danger">{err}</p> : null}
-        </CardContent>
-      </Card>
+      <div className="flex rounded-md bg-surface-muted p-0.5 text-xs">
+        <button
+          type="button"
+          onClick={() => setTab('generate')}
+          className={cn('flex-1 py-1 rounded transition-colors', tab === 'generate' ? 'bg-background shadow' : 'text-muted-foreground')}
+        >
+          Generate
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('edit')}
+          className={cn('flex-1 py-1 rounded transition-colors', tab === 'edit' ? 'bg-background shadow' : 'text-muted-foreground')}
+        >
+          Edit
+        </button>
+      </div>
+
+      {tab === 'generate' ? (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Captions className="h-4 w-4 text-brand-700" />
+              <h3 className="text-sm font-semibold">Auto captions</h3>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Word-level timing in 90+ languages. Edit any word and the burn-in updates instantly.
+            </p>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="w-full h-9 rounded-md border border-border bg-surface-raised px-3 text-sm"
+            >
+              <option value="auto">Detect language</option>
+              <option value="en">English</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="pt">Portuguese</option>
+              <option value="ja">Japanese</option>
+            </select>
+            <Button size="sm" fullWidth loading={busy} onClick={run}>
+              Generate captions
+            </Button>
+            {err ? <p className="text-xs text-danger">{err}</p> : null}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="h-[520px]">
+          <CaptionEditor projectId={projectId} />
+        </div>
+      )}
     </div>
   );
 }

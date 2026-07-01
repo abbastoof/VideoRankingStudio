@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { Button, Input } from '@vrs/ui';
 import { otpRequestSchema, type OtpRequest, type OtpRequestResponse } from '@vrs/types';
 
+import { GoogleSignInButton } from './GoogleSignInButton';
 import { api, ApiError } from '@/lib/api';
 
 const formSchema = otpRequestSchema.pick({ email: true }).extend({
@@ -97,6 +98,14 @@ export default function SignInPage() {
           Send code
         </Button>
       </form>
+
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="flex-1 h-px bg-border" />
+        <span>or</span>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+
+      <GoogleSignInButton />
 
       <p className="text-xs text-center text-muted-foreground">
         By continuing you agree to our{' '}

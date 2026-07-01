@@ -21,6 +21,7 @@ import {
   revokeSession,
   rotateSession,
 } from '../services/auth.service';
+import * as oauth from '../services/oauth.service';
 import { issueOtp, verifyOtp } from '../services/otp.service';
 
 const REFRESH_COOKIE = `${env.SESSION_COOKIE_NAME}_refresh`;
@@ -174,6 +175,65 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         },
         expiresAt: session.expiresAt.toISOString(),
       };
+    },
+  });
+
+  // ─── Google OAuth sign-in ───────────────────────────────────────────
+  app.get('/auth/google/authorize', {
+    schema: { tags: ['auth'] },
+    handler: async () => {
+      const redirectUri = `${env.API_URL}/v1/auth/google/callback`;
+      return oauth.startGoogleSignIn(redirectUri);
+    },
+  });
+
+  app.get('/auth/google/callback', {
+    schema: {
+      tags: ['auth'],
+      querystring: z.object({ code: z.string(), state: z.string() }),
+    },
+    handler: async (req, reply) => {
+      const q = z.object({ code: z.string(), state: z.string() }).parse(req.query);
+      const redirectUri = `${env.API_URL}/v1/auth/google/callback`;
+      const profile = await oauth.completeGoogleSignIn(q.code, q.state, redirectUri);
+      const user = await findOrCreateUserByEmail(profile.email, profile.name);
+
+      await prisma.account.upsert({
+        where: {
+          provider_providerSub: { provider: 'GOOGLE', providerSub: profile.sub },
+        },
+        update: { userId: user.id, email: profile.email },
+        create: {
+          userId: user.id,
+          provider: 'GOOGLE',
+          providerSub: profile.sub,
+          email: profile.email,
+        },
+      });
+
+      if (profile.imageUrl && !user.imageUrl) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { imageUrl: profile.imageUrl },
+        });
+      }
+
+      const session = await issueSession(user, {
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
+      audit({
+        actorId: user.id,
+        action: 'auth.signed_in',
+        targetType: 'session',
+        targetId: session.sessionId,
+        ip: req.ip,
+        meta: { method: 'google' },
+      });
+
+      reply.setCookie(env.SESSION_COOKIE_NAME, session.accessToken, cookieOpts(env.JWT_ACCESS_TTL_SECONDS));
+      reply.setCookie(REFRESH_COOKIE, session.refreshToken, cookieOpts(env.JWT_REFRESH_TTL_SECONDS));
+      reply.redirect(`${env.WEB_URL}/dashboard`);
     },
   });
 }

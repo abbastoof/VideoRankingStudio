@@ -28,6 +28,8 @@ const TASK_ROUTES: Record<string, string> = {
   'vrs.import.url': 'import_url',
   'vrs.export.render': 'export',
   'vrs.thumbnail.generate': 'thumbnails',
+  'vrs.publish.youtube': 'publish',
+  'vrs.publish.tiktok': 'publish',
 };
 
 interface PublishOpts {

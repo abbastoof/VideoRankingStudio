@@ -339,4 +339,44 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
       return { ok: true, exportId: ex.id };
     },
   });
+
+  // Publish target token access (worker retrieves decrypted OAuth tokens)
+  app.get('/internal/publish-targets/:id', {
+    schema: { tags: ['internal'], params: z.object({ id: z.string() }) },
+    handler: async (req) => {
+      const { id } = z.object({ id: z.string() }).parse(req.params);
+      const { getDecryptedTarget } = await import('../services/publish.service');
+      return getDecryptedTarget(id);
+    },
+  });
+
+  const publishDoneSchema = z.object({
+    status: z.enum(['PUBLISHED', 'FAILED']),
+    providerVideoId: z.string().nullable().optional(),
+    providerUrl: z.string().url().nullable().optional(),
+    errorMessage: z.string().nullable().optional(),
+  });
+
+  app.post('/internal/publish-jobs/:id/done', {
+    schema: {
+      tags: ['internal'],
+      params: z.object({ id: z.string() }),
+      body: publishDoneSchema,
+    },
+    handler: async (req) => {
+      const { id } = z.object({ id: z.string() }).parse(req.params);
+      const body = publishDoneSchema.parse(req.body);
+      const row = await prisma.publishJob.update({
+        where: { id },
+        data: {
+          status: body.status,
+          providerVideoId: body.providerVideoId ?? null,
+          providerUrl: body.providerUrl ?? null,
+          errorMessage: body.errorMessage ?? null,
+          publishedAt: body.status === 'PUBLISHED' ? new Date() : null,
+        },
+      });
+      return { ok: true, publishJobId: row.id };
+    },
+  });
 }

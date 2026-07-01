@@ -231,6 +231,96 @@ export class VrsClient {
     return this.request<ExportDetail>('GET', `/v1/exports/${exportId}`);
   }
 
+  // ────── Captions & transcripts ──────
+  listTranscripts(projectId: string) {
+    return this.request<
+      Array<{
+        id: string;
+        projectId: string;
+        assetId: string | null;
+        language: string;
+        provider: string;
+        status: string;
+        durationMs: number;
+        srtUrl: string | null;
+        vttUrl: string | null;
+        segments: Array<{
+          id: string;
+          index: number;
+          startMs: number;
+          endMs: number;
+          text: string;
+          speakerLabel: string | null;
+          confidence: number | null;
+          words: unknown[] | null;
+        }>;
+        createdAt: string;
+      }>
+    >('GET', `/v1/projects/${projectId}/transcripts`);
+  }
+  getTranscript(projectId: string, transcriptId: string) {
+    return this.request<Record<string, unknown>>('GET', `/v1/projects/${projectId}/transcripts/${transcriptId}`);
+  }
+  updateTranscriptSegment(
+    projectId: string,
+    transcriptId: string,
+    segmentId: string,
+    body: { text?: string; startMs?: number; endMs?: number; speakerLabel?: string | null },
+  ) {
+    return this.request('PATCH', `/v1/projects/${projectId}/transcripts/${transcriptId}/segments/${segmentId}`, { body });
+  }
+  insertTranscriptSegment(
+    projectId: string,
+    transcriptId: string,
+    body: { index: number; startMs: number; endMs: number; text: string; speakerLabel?: string | null },
+  ) {
+    return this.request('POST', `/v1/projects/${projectId}/transcripts/${transcriptId}/segments`, { body });
+  }
+  deleteTranscriptSegment(projectId: string, transcriptId: string, segmentId: string) {
+    return this.request<void>('DELETE', `/v1/projects/${projectId}/transcripts/${transcriptId}/segments/${segmentId}`);
+  }
+  listCaptions(projectId: string) {
+    return this.request<
+      Page<{
+        id: string;
+        projectId: string;
+        transcriptId: string | null;
+        name: string;
+        enabled: boolean;
+        styleJson: Record<string, unknown>;
+        segmentsJson: Array<{ startMs: number; endMs: number; text: string }>;
+        createdAt: string;
+        updatedAt: string;
+      }>
+    >('GET', `/v1/projects/${projectId}/captions`);
+  }
+  createCaption(
+    projectId: string,
+    body: {
+      name?: string;
+      transcriptId?: string | null;
+      styleJson?: Record<string, unknown>;
+      segments?: Array<{ startMs: number; endMs: number; text: string }>;
+    },
+  ) {
+    return this.request<Record<string, unknown>>('POST', `/v1/projects/${projectId}/captions`, { body });
+  }
+  updateCaption(
+    projectId: string,
+    captionId: string,
+    body: {
+      name?: string;
+      enabled?: boolean;
+      styleJson?: Record<string, unknown>;
+      segmentsJson?: Array<{ startMs: number; endMs: number; text: string }>;
+    },
+  ) {
+    return this.request('PATCH', `/v1/projects/${projectId}/captions/${captionId}`, { body });
+  }
+  deleteCaption(projectId: string, captionId: string) {
+    return this.request<void>('DELETE', `/v1/projects/${projectId}/captions/${captionId}`);
+  }
+
   // ────── Jobs ──────
   getJob(jobId: string) {
     return this.request<AiJob>('GET', `/v1/jobs/${jobId}`);
@@ -270,6 +360,99 @@ export class VrsClient {
   }
   getTemplate(slug: string) {
     return this.request<Template & { blueprintJson: Record<string, unknown> }>('GET', `/v1/templates/${slug}`);
+  }
+
+  // ────── Publish targets ──────
+  listPublishTargets() {
+    return this.request<
+      Page<{
+        id: string;
+        provider: string;
+        providerAccountId: string;
+        displayName: string | null;
+        scopes: string[];
+        expiresAt: string | null;
+        createdAt: string;
+      }>
+    >('GET', '/v1/publish/targets');
+  }
+  startPublishAuth(provider: 'YOUTUBE' | 'TIKTOK') {
+    return this.request<{ url: string; state: string }>('GET', `/v1/publish/oauth/${provider}/authorize`);
+  }
+  revokePublishTarget(id: string) {
+    return this.request<void>('DELETE', `/v1/publish/targets/${id}`);
+  }
+  requestPublish(body: {
+    exportId: string;
+    targetId: string;
+    title: string;
+    description?: string;
+    tags?: string[];
+    privacy: 'public' | 'unlisted' | 'private';
+  }) {
+    return this.request<{ publishJobId: string; jobId: string }>('POST', '/v1/publish', { body });
+  }
+  listPublishJobs(query?: { projectId?: string }) {
+    return this.request<
+      Page<{
+        id: string;
+        exportId: string;
+        projectId: string;
+        provider: string;
+        targetDisplayName: string | null;
+        status: string;
+        providerVideoId: string | null;
+        providerUrl: string | null;
+        errorMessage: string | null;
+        metadata: Record<string, unknown>;
+        publishedAt: string | null;
+        createdAt: string;
+      }>
+    >('GET', '/v1/publish/jobs', { query });
+  }
+
+  // ────── Support tickets ──────
+  listTickets() {
+    return this.request<
+      Page<{
+        id: string;
+        subject: string;
+        status: string;
+        priority: string;
+        category: string | null;
+        lastMessageAt: string;
+        createdAt: string;
+      }>
+    >('GET', '/v1/support/tickets');
+  }
+  createTicket(body: { subject: string; body: string; category?: string; priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT' }) {
+    return this.request<{ id: string; subject: string; status: string }>('POST', '/v1/support/tickets', { body });
+  }
+  getTicket(id: string) {
+    return this.request<{
+      id: string;
+      subject: string;
+      status: string;
+      priority: string;
+      category: string | null;
+      createdAt: string;
+      lastMessageAt: string;
+      messages: Array<{
+        id: string;
+        authorId: string;
+        authorName: string;
+        authorRole: string;
+        body: string;
+        internal: boolean;
+        createdAt: string;
+      }>;
+    }>('GET', `/v1/support/tickets/${id}`);
+  }
+  replyTicket(id: string, body: { body: string; internal?: boolean }) {
+    return this.request<{ id: string; createdAt: string }>('POST', `/v1/support/tickets/${id}/reply`, { body });
+  }
+  closeTicket(id: string) {
+    return this.request<{ ok: true }>('POST', `/v1/support/tickets/${id}/close`);
   }
 
   // ────── Insights ──────

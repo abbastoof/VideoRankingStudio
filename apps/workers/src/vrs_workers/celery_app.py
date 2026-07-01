@@ -39,6 +39,7 @@ def _make_app() -> Celery:
             Queue("import_url"),
             Queue("export", routing_key="export"),
             Queue("thumbnails"),
+            Queue("publish"),
         ),
         task_routes={
             "vrs.transcribe": {"queue": "transcription"},
@@ -52,6 +53,8 @@ def _make_app() -> Celery:
             "vrs.import.url": {"queue": "import_url"},
             "vrs.export.render": {"queue": "export"},
             "vrs.thumbnail.generate": {"queue": "thumbnails"},
+            "vrs.publish.youtube": {"queue": "publish"},
+            "vrs.publish.tiktok": {"queue": "publish"},
         },
     )
 
