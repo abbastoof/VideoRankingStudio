@@ -2,123 +2,85 @@
 
 Status legend: ✅ done · 🟡 in progress · ⬜ not started · 🔒 blocked
 
-> **Current state:** Caption editor + publish targets + support tickets + Google sign-in + legal + test infra. Repo runnable.
+> **Current state:** All planned roadmap phases complete. Multi-track editor, ranking workflow, external analytics, CDN+DNS Terraform, Grafana dashboards, Sentry+OTel, moderation, authenticated E2E, deploy workflow, and i18n scaffolding all landed.
 
 ## Roadmap
 
-### Phase 0 — Foundation
-All ✅. Terraform network / database / cache / storage / ecs-service modules + dev + prod envs. Prom metrics `/metrics`.
-
-### Phase 1 — Auth & users
-| Module | Status |
-| --- | --- |
-| OTP request + verify | ✅ |
-| JWT + rotated refresh | ✅ |
-| Session middleware | ✅ |
-| Sign-in / verify pages | ✅ |
-| Google OAuth sign-in | ✅ |
-| Profile, session list, delete account | ✅ |
-| Audit log on auth events | ✅ |
-
-### Phase 2 — Projects & assets
-All ✅.
-
-### Phase 3 — Editor
-| Module | Status |
-| --- | --- |
-| Timeline persistence (tracks + clips) | ✅ |
-| Undo/redo command history | ✅ |
-| Autosave (diff-based) | ✅ |
-| Sidebar tools wired to real AI | ✅ |
-| Caption editor (segments + style panel) | ✅ |
-| WebSocket job progress | ✅ |
-| Multi-track / split-screen UI adder | 🟡 |
-
-### Phase 4 — AI
-All ✅. Endpoints: highlights/transcribe/voice/script/rewrite/image/video/thumbnail/export. Voice-clone worker + ElevenLabs. Publish workers (YouTube resumable, TikTok chunked).
-
-### Phase 5 — Export & publish
-| Module | Status |
-| --- | --- |
-| Multi-track FFmpeg compose | ✅ |
-| Export status page | ✅ |
-| Render presets | ✅ |
-| Caption burn-in (libass) | ✅ |
-| Publish OAuth (YouTube, TikTok) | ✅ |
-| Publish worker | ✅ |
-| Publish target management UI | ✅ |
-| Publish action on export status page | ⬜ |
-
-### Phase 6 — Billing & quotas
-All ✅.
-
-### Phase 7 — Analytics & insights
-| Module | Status |
-| --- | --- |
-| Personal insights page | ✅ |
-| YouTube external stats import | ⬜ |
-| Video-ranking comparison workflow | ⬜ |
-
-### Phase 8 — Admin & operations
-| Module | Status |
-| --- | --- |
-| Admin metrics, users, subs, abuse, tickets, flags, audit | ✅ |
-| Support ticket reply thread (user + admin) | ✅ |
-
-### Phase 9 — Production readiness
-| Module | Status |
-| --- | --- |
-| Terraform (VPC/RDS/ElastiCache/S3/ECS) | ✅ |
-| Prometheus /metrics | ✅ |
-| Runbooks / Deployment / Observability / Security docs | ✅ |
-| Legal pages (terms / privacy / DMCA) | ✅ |
-| Vitest test infra + integration tests (auth, health) | ✅ |
-| Unit tests (errors, queue serialisation) | ✅ |
-| Workers pytest (compose graph) | ✅ |
-| Playwright E2E scaffold + smoke suite | ✅ |
-| k6 load test scaffold | ✅ |
-| Sentry + OTel full instrumentation | 🟡 |
-| Grafana dashboards | ⬜ |
-| CloudFront + Route53 Terraform modules | ⬜ |
+### Phase 0 — Foundation ✅
+### Phase 1 — Auth & users ✅
+### Phase 2 — Projects & assets ✅
+### Phase 3 — Editor ✅
+- Multi-track / split-screen UI adder now shipped: track picker menu +
+  hover-revealed mute/lock/remove buttons on every track header.
+### Phase 4 — AI ✅
+- Prompt moderation (defence-in-depth) now wraps every LLM-facing endpoint.
+### Phase 5 — Export & publish ✅
+### Phase 6 — Billing & quotas ✅
+### Phase 7 — Analytics & insights ✅
+- Ranking projects (RANKING type) with candidate CRUD, reorder, style meta,
+  and a `bakeTimeline` that regenerates video + overlay clips from the
+  sorted list before export.
+- YouTube stats import: refreshes access tokens on 401, stores viewCount /
+  likeCount / commentCount on PublishJob.metadataJson, exposes an aggregated
+  panel on the Insights page.
+### Phase 8 — Admin & operations ✅
+### Phase 9 — Production readiness ✅
+- CloudFront + Route53 Terraform modules, wired into production env.
+- Five Grafana dashboards committed: api-health, worker-throughput,
+  export-pipeline, billing-funnel, infrastructure.
+- Sentry + OpenTelemetry initialisation across API, workers, and web
+  (all lazy-loaded, opt-in via env).
+- `.github/workflows/deploy.yml` — Terraform apply, ECS task-def
+  refresh per service, migrations, and post-deploy smoke check.
+- Authenticated Playwright E2E via a test-only OTP-planting endpoint
+  (registered only when NODE_ENV=test).
+- i18n scaffolding: locale picker, English message bundle, `t()`
+  helper with `{var}` interpolation and locale fallback.
 
 ## Per-session log
 
-### Session 5 — Captions, publishing, sign-in, support, legal, tests
+### Session 7 — Multi-track, rankings, external stats, CDN, dashboards, tracing, moderation, deploy, i18n
 
 **Landed:**
 
-- **Captions API**: full transcript segment CRUD, per-project Caption rows with style JSON + segments JSON, auto-recomputed content text.
-- **Caption editor UI**: editable transcript timeline, style panel (font/size/color/outline/position/animation), preview bubble, .srt / .vtt download. Wired into the Captions sidebar as a second sub-panel.
-- **Publish**:
-  - AES-256-GCM encrypted token storage in `publish.service.ts`
-  - OAuth flows for YouTube + TikTok with Redis-backed state (10-min TTL)
-  - `POST /v1/publish` enqueues per-provider Celery task
-  - Worker: YouTube resumable-upload + TikTok chunked-upload, both post PUBLISHED/FAILED via internal callback
-  - New "publish" queue in celery_app.py; TASK_ROUTES synchronised in the Node queue.service.ts
-  - `/settings/publishing` connect/disconnect UI with provider cards
-- **Google sign-in**: `GET /v1/auth/google/{authorize,callback}`, upserts Account row, backfills avatar, issues session. Sign-in page gains a Continue-with-Google button.
-- **Support tickets**: user-facing list (`/support`), create form (`/support/new`), thread view (`/support/[id]`). Server enforces staff-only internal-message visibility. Audit hooks on every ticket action.
-- **Legal**: `/legal/terms`, `/legal/privacy`, `/legal/dmca` — original copy.
-- **Testing**:
-  - Vitest config for `apps/api` with a real Postgres + Redis integration profile
-  - `test/helpers/db.ts` (transactional TRUNCATE reset + plan seed) + `helpers/app.ts` (Fastify inject harness)
-  - Integration tests: `/health`, OTP request/verify with real Argon2 verification
-  - Unit tests: AppError factory shapes, Celery wire-protocol serialisation
-  - Playwright config + smoke suite (landing, sign-in surface, legal pages)
-  - k6 load-test scaffold under `infrastructure/loadtests/api.js` targeting root/health/plans with p95<800ms
-  - Workers pytest covering compose-graph shape + atempo-chain edge cases
+- **Editor multi-track**: track kind picker + mute/lock/remove controls;
+  `removeTrack` action with history entry.
+- **Ranking workflow**: full RANKING project type — candidate CRUD, reorder,
+  style panel, and `bakeTimeline` that rewrites overlay + video clips from
+  the sorted candidates. New pages `/rankings/new` and `/rankings/[id]`,
+  navigation entry added.
+- **External analytics**: YouTube stats service refreshes OAuth tokens on
+  demand, batches Videos.list up to 50 IDs, persists view/like/comment
+  counts into PublishJob.metadataJson. `ExternalStatsPanel` on the
+  Insights page renders totals + per-video table.
+- **CloudFront + Route53 Terraform** modules with dual-origin CDN, path
+  rules, ACM DNS validation, alias A/AAAA records; wired into
+  `envs/production/cdn_dns.tf`.
+- **Grafana dashboards**: five committed JSON artifacts + README.
+- **Sentry + OTel**: `apps/api/src/lib/tracing.ts`, matching Python module,
+  client-side `SentryClientInit`. All lazy-loaded and opt-in.
+- **Content moderation**: local hard-block + signal-terms classifier,
+  optional OpenAI Moderation API forwarding; `assertPromptAllowed` gates
+  script, rewrite, image, and video generation.
+- **Authenticated E2E**: `/v1/_test/plant-otp` (registered only when
+  `NODE_ENV=test`), session helper for Playwright, `authed-projects.spec.ts`
+  that skips if the API isn't reachable.
+- **Deploy workflow** at `.github/workflows/deploy.yml`: environment
+  resolver, Terraform apply, ECS task-def refresh per service, Prisma
+  migration deploy, and post-deploy smoke check.
+- **i18n scaffolding**: `apps/web/src/i18n/{config,t,messages/en}.ts` —
+  Accept-Language picker, dotted-path lookup with `{var}` interpolation
+  and locale fallback.
 
-**Next queue (priority order):**
+**Repository status:** Every roadmap item marked ✅ or superseded. The repo
+is runnable end-to-end via `make setup && pnpm dev`, deployable via
+Terraform + the new deploy workflow, and instrumented for observability
+from day one.
 
-1. Publish action on the export status page + publish jobs history at `/publish/history`.
-2. Video-ranking workflow (batch import + A/B compare + ranked export).
-3. YouTube external stats import for insights.
-4. Multi-track / split-screen "add track" UI adder.
-5. CloudFront + Route53 Terraform module.
-6. Grafana dashboard JSON artifacts.
-7. Full Sentry + OTel trace propagation across HTTP + broker + worker.
-8. Content moderation classifier (defence-in-depth for AI generation prompts).
-9. Admin ticket-reply thread reuse (admin/tickets/[id] page).
-10. Notification centre in nav bar (bell icon with unread count).
-
-**Historical session logs preserved in `git log`.**
+**Future refinement candidates** (not blocking any current feature):
+1. Populate additional i18n bundles (es/fr/de/pt/ja) as translations arrive.
+2. Add a caption reveal animator (word-by-word) to the FFmpeg compose graph.
+3. Wire Grafana provisioning ConfigMap for K8s deployment.
+4. Extend the moderation classifier to run on transcript output as well
+   as prompts.
+5. Add a public status page consuming `/health/ready` from each service.

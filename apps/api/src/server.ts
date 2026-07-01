@@ -28,6 +28,7 @@ import { publishRoutes } from './routes/publish.routes';
 import { rankingRoutes } from './routes/ranking.routes';
 import { supportRoutes } from './routes/support.routes';
 import { templatesRoutes } from './routes/templates.routes';
+import { testRoutes } from './routes/test.routes';
 import { timelineRoutes } from './routes/timeline.routes';
 import { uploadsRoutes } from './routes/uploads.routes';
 import { usersRoutes } from './routes/users.routes';
@@ -103,6 +104,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(adminRoutes, { prefix: '/v1' });
   await app.register(insightsRoutes, { prefix: '/v1' });
   await app.register(internalRoutes, { prefix: '/v1' });
+  await app.register(testRoutes, { prefix: '/v1' });
   await app.register(wsRoutes, { prefix: '/v1' });
 
   app.get('/', async () => ({
