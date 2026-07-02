@@ -247,5 +247,3 @@ async function resolvePlanCode(userId: string): Promise<'FREE' | 'CREATOR' | 'BU
   return sub?.plan.code ?? 'FREE';
 }
 
-// Re-export for routing aggregator; helps tree-shaking.
-export const _z = z;
