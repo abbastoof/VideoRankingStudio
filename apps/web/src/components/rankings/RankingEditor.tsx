@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, Download, GripVertical, Plus, Trash2, Wand2 } from 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { Badge, Button, Card, CardContent, Input } from '@vrs/ui';
+import { Badge, Button, Card, CardContent, Input, useConfirm } from '@vrs/ui';
 
 import { clientSdk } from '@/lib/client-sdk';
 
@@ -32,6 +32,7 @@ interface Ranking {
 
 export function RankingEditor({ initial }: { initial: Ranking }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [ranking, setRanking] = useState<Ranking>(initial);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -96,7 +97,13 @@ export function RankingEditor({ initial }: { initial: Ranking }) {
   }
 
   async function removeCandidate(id: string) {
-    if (!confirm('Remove this candidate?')) return;
+    const ok = await confirm({
+      title: 'Remove this candidate?',
+      description: 'The candidate and its score will be deleted from this ranking.',
+      confirmLabel: 'Remove',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await clientSdk().deleteRankingCandidate(ranking.projectId, id);
     await refresh();
   }

@@ -12,3 +12,9 @@ export {
 export { Spinner, type SpinnerProps } from './components/Spinner';
 export { Badge, type BadgeProps } from './components/Badge';
 export { Toast, type ToastProps, type ToastTone } from './components/Toast';
+export {
+  Dialog,
+  ConfirmProvider,
+  useConfirm,
+  type ConfirmOptions,
+} from './components/Dialog';

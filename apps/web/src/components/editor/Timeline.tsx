@@ -3,7 +3,7 @@
 import { Lock, LockOpen, Mic2, Music, Plus, Trash2, Type, Video, Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
-import { cn } from '@vrs/ui';
+import { cn, useConfirm } from '@vrs/ui';
 
 import { selectTimelineDurationMs, useEditorStore, type EditorClip, type EditorTrack } from '@/state/editor-store';
 
@@ -214,6 +214,7 @@ function TrackHeader({ track }: { track: EditorTrack }) {
   const toggleMuted = useEditorStore((s) => s.toggleTrackMuted);
   const toggleLocked = useEditorStore((s) => s.toggleTrackLocked);
   const removeTrack = useEditorStore((s) => s.removeTrack);
+  const confirm = useConfirm();
   return (
     <div
       className="bg-surface border-r border-border flex items-center gap-2 px-3 group"
@@ -251,10 +252,14 @@ function TrackHeader({ track }: { track: EditorTrack }) {
         </button>
         <button
           type="button"
-          onClick={() => {
-            if (confirm(`Delete this ${track.kind.toLowerCase()} track and all its clips?`)) {
-              removeTrack(track.id);
-            }
+          onClick={async () => {
+            const ok = await confirm({
+              title: `Delete this ${track.kind.toLowerCase()} track?`,
+              description: 'The track and every clip on it will be removed. You can undo this with ⌘Z.',
+              confirmLabel: 'Delete track',
+              tone: 'danger',
+            });
+            if (ok) removeTrack(track.id);
           }}
           aria-label="Remove track"
           className="p-1 rounded hover:bg-surface-muted hover:text-danger"

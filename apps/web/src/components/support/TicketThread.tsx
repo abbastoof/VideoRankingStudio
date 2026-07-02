@@ -4,7 +4,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { Badge, Button, Card, CardContent } from '@vrs/ui';
+import { Badge, Button, Card, CardContent, useConfirm } from '@vrs/ui';
 
 import { clientSdk } from '@/lib/client-sdk';
 
@@ -31,6 +31,7 @@ interface Ticket {
 
 export function TicketThread({ initial }: { initial: Ticket }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [ticket, setTicket] = useState<Ticket>(initial);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
@@ -53,7 +54,12 @@ export function TicketThread({ initial }: { initial: Ticket }) {
   }
 
   async function close() {
-    if (!confirm('Mark this ticket as resolved?')) return;
+    const ok = await confirm({
+      title: 'Mark this ticket as resolved?',
+      description: 'You can reopen it any time by adding a new reply.',
+      confirmLabel: 'Mark resolved',
+    });
+    if (!ok) return;
     await clientSdk().closeTicket(ticket.id);
     router.refresh();
   }
