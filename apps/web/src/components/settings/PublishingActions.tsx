@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { Button } from '@vrs/ui';
+import { Button, useConfirm } from '@vrs/ui';
 
 import { clientSdk } from '@/lib/client-sdk';
 
@@ -11,7 +11,13 @@ interface Props {
   existingId: string | null;
 }
 
+const PROVIDER_LABEL: Record<Props['provider'], string> = {
+  YOUTUBE: 'YouTube',
+  TIKTOK: 'TikTok',
+};
+
 export function PublishingActions({ provider, existingId }: Props) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -29,7 +35,14 @@ export function PublishingActions({ provider, existingId }: Props) {
 
   async function disconnect() {
     if (!existingId) return;
-    if (!confirm(`Disconnect from ${provider.toLowerCase()}?`)) return;
+    const ok = await confirm({
+      title: `Disconnect from ${PROVIDER_LABEL[provider]}?`,
+      description:
+        'Existing publish jobs will keep their history, but new videos will fail to upload until you reconnect.',
+      confirmLabel: 'Disconnect',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setBusy(true);
     setErr(null);
     try {
@@ -47,7 +60,7 @@ export function PublishingActions({ provider, existingId }: Props) {
         <Button size="sm" variant="outline" onClick={disconnect} loading={busy}>
           Disconnect
         </Button>
-        {err ? <p className="text-xs text-danger">{err}</p> : null}
+        {err ? <p className="text-xs text-danger" role="alert">{err}</p> : null}
       </div>
     );
   }
@@ -57,7 +70,7 @@ export function PublishingActions({ provider, existingId }: Props) {
       <Button size="sm" onClick={connect} loading={busy}>
         Connect
       </Button>
-      {err ? <p className="text-xs text-danger">{err}</p> : null}
+      {err ? <p className="text-xs text-danger" role="alert">{err}</p> : null}
     </div>
   );
 }
