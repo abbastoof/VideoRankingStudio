@@ -21,8 +21,8 @@ export function SiteNav() {
           <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground">
             Pricing
           </Link>
-          <Link href="/changelog" className="text-sm text-muted-foreground hover:text-foreground">
-            Changelog
+          <Link href="/about" className="text-sm text-muted-foreground hover:text-foreground">
+            About
           </Link>
         </nav>
         <div className="flex items-center gap-2">
@@ -54,8 +54,7 @@ export function SiteFooter() {
           <FooterCol title="Product">
             <FooterLink href="/#features">Features</FooterLink>
             <FooterLink href="/pricing">Pricing</FooterLink>
-            <FooterLink href="/changelog">Changelog</FooterLink>
-            <FooterLink href="/roadmap">Roadmap</FooterLink>
+            <FooterLink href="/signin?intent=signup">Get started</FooterLink>
           </FooterCol>
           <FooterCol title="Company">
             <FooterLink href="/about">About</FooterLink>
@@ -63,10 +62,8 @@ export function SiteFooter() {
             <FooterLink href="/legal/terms">Terms</FooterLink>
             <FooterLink href="/legal/privacy">Privacy</FooterLink>
           </FooterCol>
-          <FooterCol title="Resources">
-            <FooterLink href="/docs">Docs</FooterLink>
-            <FooterLink href="/blog">Blog</FooterLink>
-            <FooterLink href="/status">Status</FooterLink>
+          <FooterCol title="Support">
+            <FooterLink href="/support">Help centre</FooterLink>
             <FooterLink href="/legal/dmca">DMCA</FooterLink>
           </FooterCol>
         </div>
