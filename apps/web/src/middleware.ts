@@ -7,7 +7,20 @@ import { NextResponse, type NextRequest } from 'next/server';
  * just a fast first-pass redirect to the sign-in page.
  */
 
-const PROTECTED_PREFIXES = ['/app', '/dashboard', '/projects', '/templates', '/settings', '/billing', '/admin'];
+const PROTECTED_PREFIXES = [
+  '/dashboard',
+  '/projects',
+  '/rankings',
+  '/templates',
+  '/voices',
+  '/insights',
+  '/settings',
+  '/billing',
+  '/support',
+  '/publish',
+  '/notifications',
+  '/admin',
+];
 const AUTH_PREFIXES = ['/signin', '/verify'];
 const SESSION_COOKIE = process.env.NEXT_PUBLIC_SESSION_COOKIE_NAME ?? 'vrs_session';
 
