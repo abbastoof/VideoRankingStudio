@@ -116,14 +116,26 @@ function classifyLocal(input: string): ModerationResult {
 }
 
 async function classifyOpenAI(input: string): Promise<ModerationResult> {
-  const res = await fetch('https://api.openai.com/v1/moderations', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ input, model: 'omni-moderation-latest' }),
-  });
+  // Hard-cap the moderation call so a slow OpenAI incident doesn't hold user
+  // requests. If the remote moderator is unreachable we fall back to the
+  // local classifier's verdict — safer than letting a prompt through
+  // unchecked, but also better than a 30-second stall on every request.
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), 4_000);
+  let res: Response;
+  try {
+    res = await fetch('https://api.openai.com/v1/moderations', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ input, model: 'omni-moderation-latest' }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(abortTimer);
+  }
   if (!res.ok) throw new Error(`moderation ${res.status}`);
   const data = (await res.json()) as {
     results?: Array<{
