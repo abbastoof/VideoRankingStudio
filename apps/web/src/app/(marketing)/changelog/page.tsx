@@ -30,7 +30,7 @@ export default function ChangelogPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <SiteNav />
-      <main className="flex-1">
+      <main id="main" className="flex-1">
         <section className="container py-16 md:py-20 max-w-3xl">
           <div className="space-y-3">
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Changelog</h1>

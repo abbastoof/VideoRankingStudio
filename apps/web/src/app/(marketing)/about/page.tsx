@@ -15,7 +15,7 @@ export default function AboutPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <SiteNav />
-      <main className="flex-1">
+      <main id="main" className="flex-1">
         <section className="container py-16 md:py-24 space-y-6 max-w-3xl">
           <Badge tone="brand">Our mission</Badge>
           <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">

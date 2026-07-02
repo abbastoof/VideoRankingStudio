@@ -11,7 +11,7 @@ export default function DmcaPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <SiteNav />
-      <main className="container max-w-3xl py-16 prose prose-neutral dark:prose-invert">
+      <main id="main" className="container max-w-3xl py-16 prose prose-neutral dark:prose-invert">
         <h1>DMCA & Copyright</h1>
         <p className="text-sm text-muted-foreground">Effective date: 2026-01-01.</p>
 

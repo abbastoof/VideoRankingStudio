@@ -31,7 +31,7 @@ export default function ContactPage({ searchParams }: PageProps) {
   return (
     <div className="flex min-h-screen flex-col">
       <SiteNav />
-      <main className="flex-1">
+      <main id="main" className="flex-1">
         <section className="container py-16 md:py-24 max-w-5xl">
           <div className="grid gap-10 md:grid-cols-[1.1fr_1fr] md:gap-14">
             <div className="space-y-6">

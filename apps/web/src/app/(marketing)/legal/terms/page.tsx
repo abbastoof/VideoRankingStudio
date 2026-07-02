@@ -12,7 +12,7 @@ export default function TermsPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <SiteNav />
-      <main className="container max-w-3xl py-16 prose prose-neutral dark:prose-invert">
+      <main id="main" className="container max-w-3xl py-16 prose prose-neutral dark:prose-invert">
         <h1>Terms of Service</h1>
         <p className="text-sm text-muted-foreground">
           Effective date: 2026-01-01. Last updated: 2026-01-01.

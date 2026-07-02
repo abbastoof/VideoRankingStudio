@@ -63,6 +63,12 @@ export function AppShell({ user, children }: AppShellProps) {
 
   return (
     <div className="flex min-h-screen bg-background">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-elevation focus:outline-none focus:ring-2 focus:ring-brand-400"
+      >
+        Skip to main content
+      </a>
       <aside className="hidden md:flex w-64 flex-col border-r border-border bg-surface">
         <div className="px-5 py-4 border-b border-border">
           <Link href="/dashboard" aria-label="Dashboard">
@@ -138,7 +144,7 @@ export function AppShell({ user, children }: AppShellProps) {
             <NotificationBell />
           </div>
         </header>
-        <main className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
+        <main id="main" className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
       </div>
     </div>
   );

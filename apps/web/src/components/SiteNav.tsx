@@ -7,6 +7,12 @@ import { Logo } from './Logo';
 export function SiteNav() {
   return (
     <header className="sticky top-0 z-30 border-b border-border/80 bg-background/85 backdrop-blur">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-3 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:shadow-elevation focus:outline-none focus:ring-2 focus:ring-brand-400"
+      >
+        Skip to main content
+      </a>
       <div className="container flex h-14 items-center justify-between">
         <Link href="/" aria-label="VideoRankingStudio home" className="hover:opacity-90">
           <Logo />

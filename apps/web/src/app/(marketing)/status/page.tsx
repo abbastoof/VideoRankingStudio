@@ -53,7 +53,7 @@ export default async function StatusPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <SiteNav />
-      <main className="flex-1">
+      <main id="main" className="flex-1">
         <section className="container py-16 md:py-20 max-w-3xl">
           <div className="space-y-8">
             <OverallCard status={snapshot.status} updatedAt={snapshot.updatedAt} />

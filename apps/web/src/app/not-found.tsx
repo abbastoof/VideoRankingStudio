@@ -15,7 +15,7 @@ export default function NotFound() {
   return (
     <div className="flex min-h-screen flex-col">
       <SiteNav />
-      <main className="flex-1">
+      <main id="main" className="flex-1">
         <section className="container flex flex-col items-center justify-center py-20 md:py-28 text-center max-w-xl mx-auto space-y-6">
           <div
             className="grid h-12 w-12 place-items-center rounded-full bg-brand-100 text-brand-700"

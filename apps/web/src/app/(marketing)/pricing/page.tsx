@@ -42,7 +42,7 @@ export default async function PricingPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <SiteNav />
-      <main className="flex-1">
+      <main id="main" className="flex-1">
         <section className="container py-16 md:py-24 space-y-4 max-w-3xl text-center">
           <Badge tone="brand" className="mx-auto">
             <Sparkles className="h-3.5 w-3.5" /> Simple, predictable pricing
