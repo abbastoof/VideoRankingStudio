@@ -1,12 +1,20 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 
 import { updateProfileSchema, userProfileSchema } from '@vrs/types';
 
+import { env } from '../config/env';
 import { prisma } from '../config/db';
 import { Errors } from '../lib/errors';
 import { requireAuth } from '../middleware/auth';
 import { revokeAllSessionsForUser, revokeSession } from '../services/auth.service';
+
+const REFRESH_COOKIE = `${env.SESSION_COOKIE_NAME}_refresh`;
+
+function clearSessionCookies(reply: FastifyReply): void {
+  reply.clearCookie(env.SESSION_COOKIE_NAME, { path: '/' });
+  reply.clearCookie(REFRESH_COOKIE, { path: '/' });
+}
 
 export async function usersRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
@@ -105,14 +113,21 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       });
       if (!s) throw Errors.notFound('Session');
       await revokeSession(id);
+      // If the caller revoked their own session, wipe the cookies so the
+      // browser doesn't loop between the (auth) group and the protected
+      // route group on the next navigation.
+      if (id === req.auth!.sid) clearSessionCookies(reply);
       reply.code(204).send();
     },
   });
 
   app.post('/users/me/sessions/revoke-all', {
     schema: { tags: ['users'], response: { 200: z.object({ ok: z.literal(true) }) } },
-    handler: async (req) => {
+    handler: async (req, reply) => {
       await revokeAllSessionsForUser(req.auth!.sub);
+      // Revoke-all kills the caller's session too — clear cookies to prevent
+      // a redirect loop against the presence-only web middleware.
+      clearSessionCookies(reply);
       return { ok: true as const };
     },
   });
@@ -127,6 +142,7 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
         data: { status: 'PENDING_DELETION', deletedAt: new Date() },
       });
       await revokeAllSessionsForUser(req.auth!.sub);
+      clearSessionCookies(reply);
       reply.code(204).send();
     },
   });

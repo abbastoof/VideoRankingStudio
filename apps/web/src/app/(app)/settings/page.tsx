@@ -1,3 +1,6 @@
+import { ArrowRight, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@vrs/ui';
 
 import { ProfileForm } from '@/components/settings/ProfileForm';
@@ -42,10 +45,16 @@ export default async function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Session management UI lands with the audit + revoke endpoints — coming
-            in the next session.
-          </p>
+          <Link
+            href="/settings/security"
+            className="flex items-center justify-between rounded-md border border-border bg-surface-muted/40 p-3 text-sm hover:border-brand-300 hover:bg-surface-muted"
+          >
+            <span className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-brand-700" aria-hidden />
+              Review active sessions, sign out other devices, or delete your account.
+            </span>
+            <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+          </Link>
         </CardContent>
       </Card>
     </div>
