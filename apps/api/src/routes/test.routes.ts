@@ -5,14 +5,43 @@ import { prisma } from '../config/db';
 import { env } from '../config/env';
 
 /**
- * Test-only helpers. Only registered when NODE_ENV=test.
+ * Test-only helpers. Only registered when NODE_ENV=test AND the caller
+ * comes from a private/loopback address.
  *
- * These endpoints let the E2E harness plant known OTP codes so we can sign
- * in without scraping Mailhog. They must never be reachable in production.
+ * These endpoints let the E2E harness plant known OTP codes and truncate
+ * tables so we can sign in without scraping Mailhog and start each suite
+ * from a clean slate. The extra loopback gate is a belt-and-braces measure
+ * against a misconfigured production being flipped to NODE_ENV=test — the
+ * `_test/reset` endpoint is destructive and unauthenticated by design.
  */
+
+function isLoopback(ip: string | undefined): boolean {
+  if (!ip) return false;
+  return (
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip.startsWith('127.') ||
+    ip.startsWith('10.') ||
+    ip.startsWith('192.168.') ||
+    ip.startsWith('172.16.') ||
+    ip.startsWith('172.17.') ||
+    ip.startsWith('172.18.') ||
+    ip.startsWith('172.19.') ||
+    ip.startsWith('172.2') ||
+    ip.startsWith('172.30.') ||
+    ip.startsWith('172.31.')
+  );
+}
 
 export async function testRoutes(app: FastifyInstance): Promise<void> {
   if (env.NODE_ENV !== 'test') return;
+
+  app.addHook('preHandler', async (req) => {
+    if (!isLoopback(req.ip)) {
+      // Return the standard 404 instead of a hint that these routes exist.
+      throw app.httpErrors.notFound();
+    }
+  });
 
   const plantSchema = z.object({
     email: z.string().email(),
