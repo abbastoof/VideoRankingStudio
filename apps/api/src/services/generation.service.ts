@@ -91,7 +91,13 @@ export async function requestTranscription(
       });
   if (!asset || !asset.s3Key) throw Errors.notFound('Asset');
 
-  await usage.assertWithinLimit(userId, 'TRANSCRIPTION_MINUTES', 1);
+  // Atomic reservation. Reserves one minute up-front so the counter reflects
+  // the queued job; the worker's transcripts/done callback can top up the
+  // final duration once the real length is known. Without this reservation
+  // the transcription quota was never enforced — the previous code only
+  // asserted and never incremented, so `TRANSCRIPTION_MINUTES` stayed at 0
+  // forever regardless of usage.
+  await usage.assertAndIncrement(userId, 'TRANSCRIPTION_MINUTES', 1);
 
   const transcript = await prisma.transcript.create({
     data: {
@@ -150,7 +156,7 @@ export async function requestVoiceover(
   if (!voice) throw Errors.notFound('Voice');
 
   const chars = input.scriptText.length;
-  await usage.assertWithinLimit(userId, 'VOICEOVER_CHARACTERS', chars);
+  await usage.assertAndIncrement(userId, 'VOICEOVER_CHARACTERS', chars);
 
   const voiceover = await prisma.voiceover.create({
     data: {
@@ -192,7 +198,7 @@ export async function requestVoiceover(
     }),
   });
 
-  await usage.increment(userId, 'VOICEOVER_CHARACTERS', chars);
+  // The reservation happened in assertAndIncrement above — no second bump.
   await prisma.voiceover.update({ where: { id: voiceover.id }, data: { status: 'RUNNING' } });
 
   return { voiceoverId: voiceover.id, jobId: job.id };
@@ -248,9 +254,16 @@ export async function requestScriptRewrite(
 
 export async function requestImage(userId: string, projectId: string, input: GenerateImageInput) {
   await guardProject(userId, projectId);
-  await usage.assertWithinLimit(userId, 'IMAGE_GENERATIONS', input.count);
+  await usage.assertAndIncrement(userId, 'IMAGE_GENERATIONS', input.count);
   const { assertPromptAllowed } = await import('./moderation.service');
-  await assertPromptAllowed(`${input.prompt}\n${input.negativePrompt ?? ''}`);
+  try {
+    await assertPromptAllowed(`${input.prompt}\n${input.negativePrompt ?? ''}`);
+  } catch (err) {
+    // Refund the reservation — a moderation-rejected prompt never actually
+    // consumes provider capacity, so it shouldn't consume the user's quota.
+    await usage.increment(userId, 'IMAGE_GENERATIONS', -input.count);
+    throw err;
+  }
 
   const job = await enqueue({
     userId,
@@ -268,7 +281,6 @@ export async function requestImage(userId: string, projectId: string, input: Gen
     },
     idempotencyKey: idem(userId, projectId, 'image', input),
   });
-  await usage.increment(userId, 'IMAGE_GENERATIONS', input.count);
   return { jobId: job.id };
 }
 
@@ -286,9 +298,14 @@ export async function requestVideoGeneration(
   },
 ) {
   await guardProject(userId, projectId);
-  await usage.assertWithinLimit(userId, 'VIDEO_GENERATIONS', 1);
+  await usage.assertAndIncrement(userId, 'VIDEO_GENERATIONS', 1);
   const { assertPromptAllowed } = await import('./moderation.service');
-  await assertPromptAllowed(input.prompt);
+  try {
+    await assertPromptAllowed(input.prompt);
+  } catch (err) {
+    await usage.increment(userId, 'VIDEO_GENERATIONS', -1);
+    throw err;
+  }
 
   const job = await enqueue({
     userId,
@@ -305,7 +322,6 @@ export async function requestVideoGeneration(
     },
     idempotencyKey: idem(userId, projectId, 'video', input),
   });
-  await usage.increment(userId, 'VIDEO_GENERATIONS', 1);
   return { jobId: job.id };
 }
 
@@ -352,7 +368,7 @@ export async function requestExport(
     1,
     Math.ceil((await prisma.project.findUniqueOrThrow({ where: { id: projectId }, select: { durationMs: true } })).durationMs / 60_000),
   );
-  await usage.assertWithinLimit(userId, 'EXPORT_MINUTES', durationMinutes);
+  await usage.assertAndIncrement(userId, 'EXPORT_MINUTES', durationMinutes);
 
   const activeSub = await prisma.subscription.findFirst({
     where: { userId, status: { in: ['ACTIVE', 'TRIALING'] } },
@@ -402,7 +418,7 @@ export async function requestExport(
     where: { id: exportRow.id },
     data: { status: 'RENDERING', jobId: job.id },
   });
-  await usage.increment(userId, 'EXPORT_MINUTES', durationMinutes);
+  // Reservation happened in assertAndIncrement above.
 
   return { exportId: exportRow.id, jobId: job.id, title: project.title };
 }
