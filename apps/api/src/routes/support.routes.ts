@@ -93,13 +93,18 @@ export async function supportRoutes(app: FastifyInstance): Promise<void> {
     schema: { tags: ['support'], params: ticketParams },
     handler: async (req) => {
       const { id } = ticketParams.parse(req.params);
+      const isStaff = req.auth!.role === 'ADMIN' || req.auth!.role === 'SUPPORT';
+      // Users can only see their own tickets. Staff (ADMIN/SUPPORT) can see
+      // any ticket — the message-level filter still keeps `internal: true`
+      // notes hidden from non-staff even when the endpoint is scoped down.
       const ticket = await prisma.supportTicket.findFirst({
-        where: { id, userId: req.auth!.sub },
+        where: {
+          id,
+          ...(isStaff ? {} : { userId: req.auth!.sub }),
+        },
         include: {
           messages: {
-            where: req.auth!.role === 'ADMIN' || req.auth!.role === 'SUPPORT'
-              ? {}
-              : { internal: false },
+            where: isStaff ? {} : { internal: false },
             orderBy: { createdAt: 'asc' },
             include: { author: { select: { id: true, email: true, name: true, role: true } } },
           },
