@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Mail, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Info, Mail, ArrowRight } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -13,6 +13,21 @@ import { otpRequestSchema, type OtpRequest, type OtpRequestResponse } from '@vrs
 import { GoogleSignInButton } from './GoogleSignInButton';
 import { api, ApiError } from '@/lib/api';
 
+const REASON_MESSAGES: Record<string, { tone: 'info' | 'success'; text: string }> = {
+  'sessions-revoked': {
+    tone: 'success',
+    text: "You're signed out of every device. Sign in again to continue.",
+  },
+  'account-deleted': {
+    tone: 'success',
+    text: 'Your account is scheduled for deletion. Sign in within 30 days to cancel the request.',
+  },
+  'session-expired': {
+    tone: 'info',
+    text: 'Your session expired. Sign in again to continue where you left off.',
+  },
+};
+
 const formSchema = otpRequestSchema.pick({ email: true }).extend({
   email: z.string().email('Enter a valid email'),
 });
@@ -23,6 +38,8 @@ export default function SignInPage() {
   const params = useSearchParams();
   const intent = params.get('intent') === 'signup' ? 'SIGN_UP' : 'SIGN_IN';
   const next = params.get('next') ?? undefined;
+  const reason = params.get('reason');
+  const reasonMeta = reason ? REASON_MESSAGES[reason] : null;
 
   const [serverError, setServerError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -63,9 +80,27 @@ export default function SignInPage() {
           {intent === 'SIGN_UP' ? 'Create your account' : 'Welcome back'}
         </h1>
         <p className="text-sm text-muted-foreground">
-          We’ll email you a one-time code. No password needed.
+          We&rsquo;ll email you a one-time code. No password needed.
         </p>
       </header>
+
+      {reasonMeta ? (
+        <div
+          role="status"
+          className={`flex items-start gap-2 rounded-md border px-3 py-2.5 text-sm ${
+            reasonMeta.tone === 'success'
+              ? 'border-success/30 bg-success/5 text-success'
+              : 'border-brand-300 bg-brand-100/60 text-brand-800'
+          }`}
+        >
+          {reasonMeta.tone === 'success' ? (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          ) : (
+            <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          )}
+          <p>{reasonMeta.text}</p>
+        </div>
+      ) : null}
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <div className="space-y-1.5">
