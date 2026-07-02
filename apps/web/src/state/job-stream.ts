@@ -30,6 +30,10 @@ export function connectJobStream(projectId: string, onEvent?: (e: ProgressEvent)
   let closed = false;
   let attempt = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  // Track cleanup timers scheduled after terminal job states so we can
+  // cancel them if the caller closes the stream first. Without this the
+  // callbacks kept running against a torn-down editor store.
+  const cleanupTimers = new Set<ReturnType<typeof setTimeout>>();
 
   const wsBase = API_URL.replace(/^http/, 'ws');
 
@@ -53,7 +57,11 @@ export function connectJobStream(projectId: string, onEvent?: (e: ProgressEvent)
             status: evt.status,
             errorMessage: evt.errorMessage ?? undefined,
           });
-          setTimeout(() => useEditorStore.getState().clearJob(evt.jobId), 6_000);
+          const t = setTimeout(() => {
+            cleanupTimers.delete(t);
+            useEditorStore.getState().clearJob(evt.jobId);
+          }, 6_000);
+          cleanupTimers.add(t);
         } else {
           store.setJob(evt.jobId, {
             kind: store.activeJobs[evt.jobId]?.kind ?? 'unknown',
@@ -70,7 +78,11 @@ export function connectJobStream(projectId: string, onEvent?: (e: ProgressEvent)
     socket.onclose = () => {
       if (closed) return;
       attempt = Math.min(attempt + 1, 6);
-      const backoff = Math.min(30_000, 1000 * 2 ** attempt);
+      // Full jitter: pick a random point in [0, exp-cap]. Without jitter, a
+      // server restart pushes every connected client into synchronized
+      // reconnect waves — a straightforward thundering-herd DoS on ourselves.
+      const cap = Math.min(30_000, 1000 * 2 ** attempt);
+      const backoff = Math.floor(Math.random() * cap) + 250;
       reconnectTimer = setTimeout(open, backoff);
     };
     socket.onerror = () => {
@@ -84,6 +96,8 @@ export function connectJobStream(projectId: string, onEvent?: (e: ProgressEvent)
     close() {
       closed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      for (const t of cleanupTimers) clearTimeout(t);
+      cleanupTimers.clear();
       socket?.close();
     },
   };

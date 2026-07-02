@@ -2,7 +2,7 @@
 
 import { AlertCircle, ArrowLeft, CheckCircle2, Download, Loader2, Send } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Badge, Button, Card, CardContent } from '@vrs/ui';
 
@@ -33,6 +33,12 @@ export function ExportStatus({ projectId, exportId }: { projectId: string; expor
   const [record, setRecord] = useState<ExportRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
+  // Keep the latest record in a ref so the polling interval — which only
+  // runs its `useEffect` on projectId/exportId — can read the current
+  // status without recreating itself on every state change. The previous
+  // version closed over `record: null` and polled forever after completion.
+  const recordRef = useRef<ExportRecord | null>(null);
+  recordRef.current = record;
 
   async function refresh() {
     try {
@@ -45,14 +51,13 @@ export function ExportStatus({ projectId, exportId }: { projectId: string; expor
 
   useEffect(() => {
     void refresh();
-    const stream = connectJobStream(projectId, (evt) => {
+    const stream = connectJobStream(projectId, () => {
       // Any progress event on the project prompts a refresh — cheap and always
       // in sync with server state.
       void refresh();
-      if (evt.status === 'SUCCEEDED' || evt.status === 'FAILED') void refresh();
     });
     const poll = setInterval(() => {
-      const r = record;
+      const r = recordRef.current;
       if (r && (r.status === 'COMPLETED' || r.status === 'FAILED')) return;
       void refresh();
     }, 4000);
