@@ -21,6 +21,7 @@ import type { Prisma } from '@vrs/db';
 import { prisma } from '../config/db';
 import { Errors } from '../lib/errors';
 import { presignGet } from './storage.service';
+import * as usage from './usage.service';
 
 export interface RankingCandidate {
   id: string;
@@ -68,30 +69,40 @@ export async function createRankingProject(
   userId: string,
   input: { title: string; aspectRatio?: 'R9_16' | 'R16_9' | 'R1_1' | 'R4_5'; order?: 'asc' | 'desc' },
 ) {
-  const project = await prisma.$transaction(async (tx) => {
-    const p = await tx.project.create({
-      data: {
-        userId,
-        title: input.title,
-        type: 'RANKING',
-        aspectRatio: input.aspectRatio ?? 'R9_16',
-        settingsJson: { candidates: [], order: input.order ?? 'desc' } as Prisma.InputJsonValue,
-      },
+  // Ranking projects count against the same monthly quota as regular
+  // projects — a user could otherwise blow past their Free-tier limit by
+  // just picking the ranking template.
+  await usage.assertAndIncrement(userId, 'VIDEOS_CREATED', 1);
+  try {
+    const project = await prisma.$transaction(async (tx) => {
+      const p = await tx.project.create({
+        data: {
+          userId,
+          title: input.title,
+          type: 'RANKING',
+          aspectRatio: input.aspectRatio ?? 'R9_16',
+          settingsJson: { candidates: [], order: input.order ?? 'desc' } as Prisma.InputJsonValue,
+        },
+      });
+      await tx.track.createMany({
+        data: [
+          { projectId: p.id, kind: 'VIDEO', index: 0 },
+          { projectId: p.id, kind: 'AUDIO', index: 0 },
+          { projectId: p.id, kind: 'CAPTION', index: 0 },
+        ],
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: { projectsCount: { increment: 1 } },
+      });
+      return p;
     });
-    await tx.track.createMany({
-      data: [
-        { projectId: p.id, kind: 'VIDEO', index: 0 },
-        { projectId: p.id, kind: 'AUDIO', index: 0 },
-        { projectId: p.id, kind: 'CAPTION', index: 0 },
-      ],
-    });
-    await tx.user.update({
-      where: { id: userId },
-      data: { projectsCount: { increment: 1 } },
-    });
-    return p;
-  });
-  return { id: project.id, title: project.title };
+    return { id: project.id, title: project.title };
+  } catch (err) {
+    // Refund the quota so a downstream failure doesn't burn a monthly slot.
+    await usage.increment(userId, 'VIDEOS_CREATED', -1);
+    throw err;
+  }
 }
 
 export async function getRanking(userId: string, projectId: string) {

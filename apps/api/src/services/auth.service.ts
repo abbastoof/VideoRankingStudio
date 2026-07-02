@@ -87,7 +87,17 @@ export async function rotateSession(refreshToken: string, ctx: SessionContext): 
     throw Errors.accountSuspended();
   }
 
-  // Atomically: mark current revoked + issue a new session pointing back.
+  // Atomic revoke of the current session BEFORE we issue the replacement.
+  // Two concurrent refreshes using the same refresh token race here — only
+  // one `updateMany({ where: revokedAt: null })` succeeds. The loser sees
+  // count === 0 and gets a clean 401 instead of both winning and inflating
+  // the user's active-session count off a single stolen token.
+  const won = await prisma.session.updateMany({
+    where: { id: session.id, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  if (won.count === 0) throw Errors.sessionExpired();
+
   const { token: nextRefresh, hash: nextHash } = generateRefreshToken();
   const nextExpiresAt = new Date(Date.now() + env.JWT_REFRESH_TTL_SECONDS * 1000);
 
@@ -102,7 +112,7 @@ export async function rotateSession(refreshToken: string, ctx: SessionContext): 
   });
   await prisma.session.update({
     where: { id: session.id },
-    data: { revokedAt: new Date(), replacedById: nextSession.id },
+    data: { replacedById: nextSession.id },
   });
   await evictSession(session.id);
 
