@@ -10,9 +10,11 @@ import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import { env } from './config/env';
+import { buildHelmetOptions } from './config/security';
 import { logger } from './lib/logger';
 import { registerMetrics } from './lib/metrics';
 import { errorHandler } from './middleware/error';
+import { registerIdempotency } from './middleware/idempotency';
 import { adminRoutes } from './routes/admin.routes';
 import { assetsRoutes } from './routes/assets.routes';
 import { authRoutes } from './routes/auth.routes';
@@ -46,10 +48,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   await app.register(sensible);
-  await app.register(helmet, {
-    contentSecurityPolicy: false,
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-  });
+  await app.register(helmet, buildHelmetOptions());
   await app.register(cors, {
     origin: env.NODE_ENV === 'development' ? true : [env.WEB_URL],
     credentials: true,
@@ -85,6 +84,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   app.setErrorHandler(errorHandler);
 
   await registerMetrics(app);
+  registerIdempotency(app);
   await app.register(healthRoutes);
   await app.register(authRoutes, { prefix: '/v1' });
   await app.register(usersRoutes, { prefix: '/v1' });
