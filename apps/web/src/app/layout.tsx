@@ -30,10 +30,9 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     siteName: 'VideoRankingStudio',
-    images: ['/og.png'],
   },
   twitter: { card: 'summary_large_image' },
-  icons: { icon: '/favicon.svg' },
+  // icon.svg + opengraph-image.tsx co-located in app/ handle these automatically.
 };
 
 export const viewport: Viewport = {
