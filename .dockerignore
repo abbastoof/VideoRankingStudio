@@ -1,0 +1,59 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+.github
+
+# Node / build outputs
+**/node_modules
+**/dist
+**/build
+**/.next
+**/.turbo
+**/coverage
+**/.nyc_output
+
+# Python bytecode
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Environment secrets. NEVER ship these to image layers.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+
+# Docs and repo-only assets we don't need inside the image
+docs
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+PROGRESS.md
+ARCHITECTURE.md
+LICENSE
+apps/web/e2e
+apps/api/test
+apps/workers/tests
+tools
+
+# Terraform / infra artefacts
+infrastructure/terraform/**/.terraform
+infrastructure/terraform/**/*.tfstate*
+infrastructure/terraform/**/*.tfvars
+
+# Local logs
+*.log
+logs

@@ -78,9 +78,59 @@ jobs:
         working-directory: infrastructure/terraform/envs/${{ needs.resolve.outputs.env }}
         run: terraform apply -input=false -auto-approve plan.tfplan
 
+  migrate:
+    name: Deploy schema migrations
+    needs: [resolve, terraform]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 9.4.0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.11.1
+          cache: pnpm
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch DB connection + deploy migrations
+        # Migrations run BEFORE the new container image rolls, so the API
+        # never boots against a schema that doesn't have its expected
+        # columns. Migrations must be backwards-compatible with the
+        # currently-running code — that's a coding constraint, not something
+        # the pipeline can enforce, but ordering here is a hard requirement.
+        #
+        # The DATABASE_URL is resolved and consumed in a single step so the
+        # password never crosses a GitHub Actions output boundary (masked
+        # logs still expose values to downstream jobs).
+        run: |
+          set -euo pipefail
+          DB_JSON=$(aws secretsmanager get-secret-value \
+            --secret-id vrs-${{ needs.resolve.outputs.env }}/db-master \
+            --query SecretString --output text)
+          USER=$(echo "$DB_JSON" | jq -r .username)
+          PASS=$(echo "$DB_JSON" | jq -r .password)
+          DBN=$(echo "$DB_JSON" | jq -r .dbname)
+          echo "::add-mask::$PASS"
+          HOST=$(aws rds describe-db-clusters \
+            --db-cluster-identifier vrs-${{ needs.resolve.outputs.env }}-postgres \
+            --query 'DBClusters[0].Endpoint' --output text)
+          export DATABASE_URL="postgresql://$USER:$PASS@$HOST:5432/$DBN"
+          pnpm db:migrate:deploy
+
   ecs-deploy:
     name: Roll new task definitions
-    needs: [resolve, terraform]
+    needs: [resolve, terraform, migrate]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -145,50 +195,13 @@ jobs:
           aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE"
 
   post-deploy:
-    name: Smoke checks + migrations
+    name: Smoke checks
     needs: [resolve, ecs-deploy]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with: { version: 9.4.0 }
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20.11.1
-          cache: pnpm
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Fetch database URL from Secrets Manager
-        id: db
-        run: |
-          DB_JSON=$(aws secretsmanager get-secret-value \
-            --secret-id vrs-${{ needs.resolve.outputs.env }}/db-master \
-            --query SecretString --output text)
-          USER=$(echo "$DB_JSON" | jq -r .username)
-          PASS=$(echo "$DB_JSON" | jq -r .password)
-          DBN=$(echo "$DB_JSON" | jq -r .dbname)
-          echo "::add-mask::$PASS"
-          HOST=$(aws rds describe-db-clusters \
-            --db-cluster-identifier vrs-${{ needs.resolve.outputs.env }}-postgres \
-            --query 'DBClusters[0].Endpoint' --output text)
-          echo "url=postgresql://$USER:$PASS@$HOST:5432/$DBN" >> $GITHUB_OUTPUT
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Deploy pending Prisma migrations
-        env:
-          DATABASE_URL: ${{ steps.db.outputs.url }}
-        run: pnpm db:migrate:deploy
-
       - name: Smoke — API root
         env:
           API_URL: https://api.${{ vars.APEX_DOMAIN }}
