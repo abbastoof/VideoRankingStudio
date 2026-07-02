@@ -23,6 +23,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${baseUrl}/legal/terms`,   lastModified: now, changeFrequency: 'yearly',  priority: 0.3 },
     { url: `${baseUrl}/legal/privacy`, lastModified: now, changeFrequency: 'yearly',  priority: 0.3 },
     { url: `${baseUrl}/legal/dmca`,    lastModified: now, changeFrequency: 'yearly',  priority: 0.3 },
+    { url: `${baseUrl}/legal/security`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
   ];
 
   return staticRoutes;
