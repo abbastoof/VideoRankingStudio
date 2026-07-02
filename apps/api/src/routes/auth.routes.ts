@@ -79,11 +79,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     handler: async (req, reply) => {
       const body = otpVerifySchema.parse(req.body);
 
-      // Try SIGN_IN first, fall back to SIGN_UP for new accounts.
+      // Try SIGN_IN first, fall back to SIGN_UP only when there was no live
+      // SIGN_IN OTP for this email at all. Previously the catch swallowed
+      // OTP_EXPIRED and OTP_ATTEMPTS_EXCEEDED too, which meant users got a
+      // misleading "code is not correct" for what were really rate-limit or
+      // expiry errors — and worse, a wrong-code attempt against SIGN_IN was
+      // followed by another attempt against SIGN_UP, silently doubling the
+      // brute-force surface per submit.
       let verified;
       try {
         verified = await verifyOtp({ email: body.email, code: body.code, purpose: 'SIGN_IN' });
-      } catch {
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        if (code !== 'OTP_INVALID') throw err;
         verified = await verifyOtp({ email: body.email, code: body.code, purpose: 'SIGN_UP' });
       }
 

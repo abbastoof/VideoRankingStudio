@@ -38,10 +38,13 @@ interface CachedResponse {
   statusCode: number;
   contentType: string | null;
   body: string; // base64-encoded to preserve binary safety
-  bodyHash: string;
   requestBodyHash: string;
   cachedAt: string;
 }
+
+// Allow letters, digits, and the ASCII printables Stripe permits. Prevents
+// URLs, JWTs, or entire payloads being smuggled in as Idempotency-Key values.
+const KEY_FORMAT = /^[A-Za-z0-9_.:@\-]{1,255}$/;
 
 function keyFor(scope: string, key: string): string {
   return `idem:${scope}:${key}`;
@@ -71,7 +74,11 @@ export function registerIdempotency(app: import('fastify').FastifyInstance): voi
   app.addHook('preHandler', async (req, reply) => {
     if (!shouldEnforce(req)) return;
     const rawKey = req.headers['idempotency-key'] as string;
-    if (rawKey.length > 200) throw Errors.badRequest('Idempotency-Key too long');
+    if (!KEY_FORMAT.test(rawKey)) {
+      throw Errors.badRequest(
+        'Idempotency-Key must be 1–255 characters of letters, digits, `_ . : @ -`',
+      );
+    }
 
     const bodyHash = hashOf(req.body);
     const scope = scopeFrom(req);
@@ -138,7 +145,6 @@ export function registerIdempotency(app: import('fastify').FastifyInstance): voi
       statusCode: reply.statusCode,
       contentType: reply.getHeader('content-type')?.toString() ?? null,
       body: buffer.toString('base64'),
-      bodyHash: hashOf(buffer.toString('base64')),
       requestBodyHash: ctx.bodyHash,
       cachedAt: new Date().toISOString(),
     };

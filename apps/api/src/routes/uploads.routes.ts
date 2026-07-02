@@ -60,6 +60,10 @@ export async function uploadsRoutes(app: FastifyInstance): Promise<void> {
         bucket: 'uploads',
         key: finalKey,
         contentType: body.mimeType,
+        // Bind the presigned URL to the size the client committed to. Without
+        // this, a malicious client can PUT any-size file since S3 has no
+        // upstream check of what the API said it approved.
+        contentLength: body.sizeBytes,
       });
 
       return {

@@ -67,13 +67,18 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
   const cookieHeader = getCookieHeader();
   if (cookieHeader) finalHeaders.Cookie = cookieHeader;
 
+  // Any request that forwards user cookies is per-request data — the Next
+  // fetch cache must never serve it to a different visitor. Default to
+  // no-store whenever a cookie is attached; callers can still opt in to
+  // caching explicitly on truly public GETs.
+  const shouldCache = !noStore && cookieHeader === undefined && method === 'GET';
   const res = await fetch(url, {
     method,
     headers: finalHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     credentials: 'include',
     signal,
-    cache: noStore ? 'no-store' : 'default',
+    cache: shouldCache ? 'default' : 'no-store',
   });
 
   if (res.status === 204) return undefined as T;

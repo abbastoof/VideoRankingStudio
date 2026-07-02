@@ -34,6 +34,12 @@ interface PresignPutOpts {
   bucket: keyof typeof buckets;
   key: string;
   contentType: string;
+  /**
+   * Exact byte length the client committed to uploading. Signing this into
+   * the URL binds the presigned upload to a specific size — a client cannot
+   * substitute a 100 GB file for an approved 5 MB one and have S3 accept it.
+   */
+  contentLength?: number;
   expiresInSeconds?: number;
 }
 
@@ -45,6 +51,7 @@ export async function presignPut(opts: PresignPutOpts): Promise<string> {
     Bucket: buckets[opts.bucket],
     Key: opts.key,
     ContentType: opts.contentType,
+    ...(opts.contentLength !== undefined ? { ContentLength: opts.contentLength } : {}),
   });
   return getSignedUrl(getS3(), cmd, {
     expiresIn: opts.expiresInSeconds ?? env.S3_PRESIGNED_URL_TTL_SECONDS,
