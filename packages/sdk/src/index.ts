@@ -104,6 +104,29 @@ export interface ExportDetail extends ExportSummary {
 export class VrsClient {
   constructor(private readonly opts: SdkOptions) {}
 
+  // ────── Public (unauthenticated) ──────
+  submitContactMessage(body: {
+    name: string;
+    email: string;
+    topic?: 'general' | 'sales' | 'support' | 'press' | 'security';
+    message: string;
+    website?: string;
+  }) {
+    return this.request<{ ok: true }>('POST', '/v1/public/contact', { body });
+  }
+  getPublicStatus() {
+    return this.request<{
+      status: 'operational' | 'degraded' | 'down';
+      updatedAt: string;
+      components: Array<{
+        key: string;
+        label: string;
+        status: 'operational' | 'degraded' | 'down';
+        latencyMs?: number;
+      }>;
+    }>('GET', '/v1/public/status');
+  }
+
   // ────── Auth ──────
   authOtpRequest(body: OtpRequest) {
     return this.request<OtpRequestResponse>('POST', '/v1/auth/otp/request', { body });

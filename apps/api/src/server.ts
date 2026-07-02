@@ -26,6 +26,7 @@ import { insightsRoutes } from './routes/insights.routes';
 import { internalRoutes } from './routes/internal.routes';
 import { notificationsRoutes } from './routes/notifications.routes';
 import { projectsRoutes } from './routes/projects.routes';
+import { publicRoutes } from './routes/public.routes';
 import { publishRoutes } from './routes/publish.routes';
 import { rankingRoutes } from './routes/ranking.routes';
 import { supportRoutes } from './routes/support.routes';
@@ -86,6 +87,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await registerMetrics(app);
   registerIdempotency(app);
   await app.register(healthRoutes);
+  await app.register(publicRoutes, { prefix: '/v1' });
   await app.register(authRoutes, { prefix: '/v1' });
   await app.register(usersRoutes, { prefix: '/v1' });
   await app.register(projectsRoutes, { prefix: '/v1' });
