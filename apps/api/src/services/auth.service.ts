@@ -4,6 +4,7 @@ import { prisma } from '../config/db';
 import { env } from '../config/env';
 import { Errors } from '../lib/errors';
 import { generateRefreshToken, hashRefreshToken, signAccessToken } from '../lib/jwt';
+import { evictSession, evictSessionsForUser } from './session-cache.service';
 
 export interface SessionContext {
   ip?: string;
@@ -103,6 +104,7 @@ export async function rotateSession(refreshToken: string, ctx: SessionContext): 
     where: { id: session.id },
     data: { revokedAt: new Date(), replacedById: nextSession.id },
   });
+  await evictSession(session.id);
 
   const accessToken = await signAccessToken({
     sub: session.user.id,
@@ -118,6 +120,7 @@ export async function revokeSession(sessionId: string): Promise<void> {
     where: { id: sessionId },
     data: { revokedAt: new Date() },
   });
+  await evictSession(sessionId);
 }
 
 export async function revokeAllSessionsForUser(userId: string): Promise<void> {
@@ -125,4 +128,5 @@ export async function revokeAllSessionsForUser(userId: string): Promise<void> {
     where: { userId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+  await evictSessionsForUser(userId);
 }

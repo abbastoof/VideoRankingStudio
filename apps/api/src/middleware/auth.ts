@@ -1,9 +1,9 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { prisma } from '../config/db';
 import { env } from '../config/env';
 import { Errors } from '../lib/errors';
 import { verifyAccessToken, type AccessTokenPayload } from '../lib/jwt';
+import { isUserTombstoned, readSession } from '../services/session-cache.service';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -28,16 +28,19 @@ export async function requireAuth(req: FastifyRequest, _reply: FastifyReply): Pr
     throw Errors.sessionInvalid();
   }
 
-  // Cheap freshness check: ensure session row still exists and isn't revoked.
-  const session = await prisma.session.findUnique({
-    where: { id: req.auth.sid },
-    select: { id: true, revokedAt: true, expiresAt: true, user: { select: { status: true, deletedAt: true } } },
-  });
-  if (!session || session.revokedAt || session.expiresAt < new Date()) {
+  // Redis-cached freshness check — falls through to Postgres on miss.
+  const session = await readSession(req.auth.sid);
+  if (!session || session.expiresAt < Date.now()) {
     throw Errors.sessionExpired();
   }
-  if (session.user.deletedAt || session.user.status === 'SUSPENDED') {
+  if (session.userDeleted || session.userStatus === 'SUSPENDED') {
     throw Errors.accountSuspended();
+  }
+
+  // Tombstone check: if `revokeAllSessionsForUser` was called after this
+  // cache entry was written, treat the cached session as revoked.
+  if (await isUserTombstoned(session.userId, session.cachedAt)) {
+    throw Errors.sessionExpired();
   }
 }
 
