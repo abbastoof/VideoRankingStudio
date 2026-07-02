@@ -2,10 +2,10 @@
 
 > AI-powered short-form video creation platform. Upload a long video or paste a script, and the platform produces a finished, captioned, voiced, vertical-format video ready to publish.
 
-[![CI](https://img.shields.io/badge/CI-pending-yellow)]()
-[![License](https://img.shields.io/badge/license-proprietary-blue)]()
-[![Node](https://img.shields.io/badge/node-20.11+-green)]()
-[![Python](https://img.shields.io/badge/python-3.11+-green)]()
+[![CI](https://github.com/abbastoof/VideoRankingStudio/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/abbastoof/VideoRankingStudio/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-proprietary-blue)](#license)
+[![Node](https://img.shields.io/badge/node-20.11+-green)](https://nodejs.org)
+[![Python](https://img.shields.io/badge/python-3.11+-green)](https://www.python.org/)
 
 ## Overview
 
