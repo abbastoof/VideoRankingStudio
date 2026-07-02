@@ -50,20 +50,26 @@ export function SiteFooter() {
             The shortest path from raw footage to a polished short. Built for creators who ship every week.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-4">
           <FooterCol title="Product">
             <FooterLink href="/#features">Features</FooterLink>
             <FooterLink href="/pricing">Pricing</FooterLink>
+            <FooterLink href="/changelog">Changelog</FooterLink>
+            <FooterLink href="/roadmap">Roadmap</FooterLink>
             <FooterLink href="/signin?intent=signup">Get started</FooterLink>
           </FooterCol>
           <FooterCol title="Company">
             <FooterLink href="/about">About</FooterLink>
             <FooterLink href="/contact">Contact</FooterLink>
+          </FooterCol>
+          <FooterCol title="Resources">
+            <FooterLink href="/status">System status</FooterLink>
+            <FooterLink href="/contact?topic=support">Help &amp; support</FooterLink>
+            <FooterLink href="/contact?topic=security">Report a vulnerability</FooterLink>
+          </FooterCol>
+          <FooterCol title="Legal">
             <FooterLink href="/legal/terms">Terms</FooterLink>
             <FooterLink href="/legal/privacy">Privacy</FooterLink>
-          </FooterCol>
-          <FooterCol title="Support">
-            <FooterLink href="/support">Help centre</FooterLink>
             <FooterLink href="/legal/dmca">DMCA</FooterLink>
           </FooterCol>
         </div>
