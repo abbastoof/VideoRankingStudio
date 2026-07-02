@@ -51,13 +51,18 @@ export default function AboutPage() {
         <section className="container py-16 md:py-20 max-w-3xl space-y-6">
           <h2 className="text-2xl font-semibold tracking-tight">What we're building next</h2>
           <p className="text-muted-foreground leading-relaxed">
-            Live public roadmap coming soon. In the meantime: multi-language
-            interfaces, richer voice cloning controls, deeper analytics on
-            what actually earned watch-time, and a mobile companion for
-            reviewing renders on the go.
+            The public{' '}
+            <Link href="/roadmap" className="text-brand-600 underline underline-offset-4 hover:text-brand-700">
+              roadmap
+            </Link>{' '}
+            is where we plan in the open — what we&apos;re shaping, what
+            we&apos;re actively building, and what already shipped. Multi-
+            language interfaces, richer voice cloning controls, deeper
+            retention analytics, and a mobile review companion are all in
+            flight.
           </p>
           <p className="text-muted-foreground leading-relaxed">
-            If you have a use case we haven't thought about, we want to hear it.
+            If you have a use case we haven&apos;t thought about, we want to hear it.
           </p>
           <div className="flex flex-wrap gap-3 pt-4">
             <Link href="/contact">
