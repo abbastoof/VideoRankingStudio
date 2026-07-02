@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import { EditorShell } from '@/components/editor/EditorShell';
+import { MobileEditorGate } from '@/components/editor/MobileEditorGate';
 import { serverClient } from '@/lib/sdk';
 import type { EditorClip, EditorTrack } from '@/state/editor-store';
 
@@ -23,8 +24,10 @@ export default async function ProjectEditorPage({ params }: PageProps) {
   const initialState = await loadTimeline(params.id, project);
 
   return (
-    <div className="-m-6 md:-m-8">
-      <EditorShell projectId={params.id} initialState={initialState} />
+    <div className="-mx-4 -my-6 md:-m-8">
+      <MobileEditorGate projectTitle={project.title}>
+        <EditorShell projectId={params.id} initialState={initialState} />
+      </MobileEditorGate>
     </div>
   );
 }

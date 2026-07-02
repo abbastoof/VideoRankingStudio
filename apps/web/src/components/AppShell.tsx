@@ -22,6 +22,7 @@ import { Button, cn } from '@vrs/ui';
 import type { SessionUser } from '@vrs/types';
 
 import { Logo } from './Logo';
+import { MobileNav } from './MobileNav';
 import { NotificationBell } from './NotificationBell';
 import { api } from '@/lib/api';
 
@@ -115,14 +116,23 @@ export function AppShell({ user, children }: AppShellProps) {
       </aside>
 
       <div className="flex flex-1 flex-col min-w-0">
-        <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-border bg-background/90 px-4 backdrop-blur md:px-8">
-          <div className="md:hidden">
+        <header className="sticky top-0 z-20 flex h-14 items-center gap-2 border-b border-border bg-background/90 px-4 backdrop-blur md:gap-3 md:px-8">
+          <MobileNav
+            user={user}
+            primary={nav}
+            secondary={secondaryNav}
+            pathname={pathname}
+            signingOut={signingOut}
+            onSignOut={signOut}
+          />
+          <Link href="/dashboard" className="md:hidden" aria-label="Dashboard">
             <Logo variant="mark" />
-          </div>
-          <div className="flex flex-1 items-center justify-end gap-3">
-            <Link href="/projects/new">
+          </Link>
+          <div className="flex flex-1 items-center justify-end gap-2 md:gap-3">
+            <Link href="/projects/new" aria-label="New project">
               <Button size="sm" leftIcon={<Plus className="h-4 w-4" />}>
-                New project
+                <span className="hidden sm:inline">New project</span>
+                <span className="sm:hidden">New</span>
               </Button>
             </Link>
             <NotificationBell />

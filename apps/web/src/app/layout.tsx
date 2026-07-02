@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 
 import { QueryProvider } from '@/components/QueryProvider';
@@ -34,6 +34,16 @@ export const metadata: Metadata = {
   },
   twitter: { card: 'summary_large_image' },
   icons: { icon: '/favicon.svg' },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0b0f' },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
