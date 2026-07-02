@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { env } from '../config/env';
@@ -51,7 +53,12 @@ export async function requireAdmin(req: FastifyRequest, reply: FastifyReply): Pr
 
 export async function requireInternal(req: FastifyRequest, _reply: FastifyReply): Promise<void> {
   const header = req.headers['x-internal-service-token'];
-  if (typeof header !== 'string' || header !== env.INTERNAL_SERVICE_TOKEN) {
-    throw Errors.unauthorized();
-  }
+  if (typeof header !== 'string') throw Errors.unauthorized();
+  // Constant-time compare. String equality on secrets leaks byte-level info
+  // through response-timing side channels — an attacker with enough samples
+  // can enumerate the token.
+  const expected = Buffer.from(env.INTERNAL_SERVICE_TOKEN, 'utf8');
+  const provided = Buffer.from(header, 'utf8');
+  if (provided.length !== expected.length) throw Errors.unauthorized();
+  if (!timingSafeEqual(provided, expected)) throw Errors.unauthorized();
 }

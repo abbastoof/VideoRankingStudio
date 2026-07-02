@@ -77,6 +77,56 @@ export async function increment(userId: string, kind: UsageKind, by: number) {
   });
 }
 
+/**
+ * Atomically check-then-increment usage in a single UPDATE. This is the
+ * quota primitive callers should prefer over `assertWithinLimit` +
+ * `increment`, which allowed two concurrent requests to both pass the check
+ * before either wrote.
+ *
+ * Returns `true` if the increment succeeded (the caller may proceed) and
+ * `false` if it would have pushed the counter over the limit.
+ */
+export async function tryReserve(
+  userId: string,
+  kind: UsageKind,
+  requested: number,
+): Promise<boolean> {
+  await getOrCreateUsage(userId, kind);
+  const { start } = currentPeriod();
+  // Postgres CTE: only bump `used` when the projected total fits the limit.
+  // -1 encodes "unlimited" and always passes.
+  const res = await prisma.$executeRaw`
+    UPDATE "UsageRecord"
+    SET "used" = "used" + ${BigInt(requested)}::bigint
+    WHERE "userId" = ${userId}
+      AND "kind"::text = ${kind}
+      AND "periodStart" = ${start}
+      AND ("limit" = -1 OR "used" + ${BigInt(requested)}::bigint <= "limit")
+  `;
+  return Number(res) > 0;
+}
+
+/**
+ * Atomic reserve that throws the same typed quota errors as the legacy
+ * check-then-act API. Prefer this in new code.
+ */
+export async function assertAndIncrement(
+  userId: string,
+  kind: UsageKind,
+  requested: number,
+): Promise<void> {
+  const ok = await tryReserve(userId, kind, requested);
+  if (ok) return;
+  const rec = await getOrCreateUsage(userId, kind);
+  if (kind === 'VIDEOS_CREATED') {
+    throw Errors.projectLimitReached(Number(rec.limit));
+  }
+  if (kind === 'VOICEOVER_CHARACTERS') {
+    throw Errors.voiceoverQuotaExceeded(Number(rec.limit - rec.used));
+  }
+  throw Errors.paymentRequired();
+}
+
 export async function getSummary(userId: string) {
   const { start, end } = currentPeriod();
   const limits = await resolvePlanLimits(userId);

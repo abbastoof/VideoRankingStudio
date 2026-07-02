@@ -101,9 +101,23 @@ export async function cancelActiveSubscription(userId: string, immediate = false
 
 /**
  * Stripe webhook ingestion. The webhook route already verifies the signature.
+ *
+ * Stripe retries failed deliveries and occasionally re-delivers healthy
+ * events. The upsert-on-event-id below only protects the delivery row —
+ * without an early-exit, a replay would fire `notify()` again for a
+ * subscription cancellation the user has already been told about.
  */
 export async function handleWebhookEvent(event: Stripe.Event): Promise<void> {
-  // Persist a record-of-delivery for replay protection + audit.
+  const existing = await prisma.webhookDelivery.findUnique({
+    where: { source_externalId: { source: 'STRIPE', externalId: event.id } },
+    select: { status: true },
+  });
+  if (existing?.status === 'PROCESSED') {
+    // Already handled successfully in a prior delivery — acknowledge quickly
+    // so Stripe stops retrying without touching downstream side effects.
+    return;
+  }
+
   await prisma.webhookDelivery.upsert({
     where: { source_externalId: { source: 'STRIPE', externalId: event.id } },
     create: {
@@ -164,6 +178,13 @@ async function upsertSubscription(sub: Stripe.Subscription): Promise<void> {
 
   const priceId = sub.items.data[0]?.price.id;
   const planCode = matchPlanByPrice(priceId);
+  if (!planCode) {
+    // A price we didn't recognise is a configuration bug we want to fail
+    // loudly on — silently placing every unknown price into CREATOR meant
+    // an env-var mistake could quietly downgrade or upgrade real users.
+    logger.error({ priceId, stripeSubscriptionId: sub.id }, 'subscription.unknown_price');
+    return;
+  }
   const interval = sub.items.data[0]?.price.recurring?.interval === 'year' ? 'YEAR' : 'MONTH';
 
   const plan = await prisma.plan.findUnique({ where: { code: planCode } });
@@ -284,7 +305,8 @@ async function recordInvoice(inv: Stripe.Invoice): Promise<void> {
   }
 }
 
-function matchPlanByPrice(priceId?: string): 'CREATOR' | 'BUSINESS' {
+function matchPlanByPrice(priceId?: string): 'CREATOR' | 'BUSINESS' | null {
+  if (!priceId) return null;
   if (
     priceId === env.STRIPE_PRICE_CREATOR_MONTHLY ||
     priceId === env.STRIPE_PRICE_CREATOR_ANNUAL
@@ -297,5 +319,5 @@ function matchPlanByPrice(priceId?: string): 'CREATOR' | 'BUSINESS' {
   ) {
     return 'BUSINESS';
   }
-  return 'CREATOR';
+  return null;
 }

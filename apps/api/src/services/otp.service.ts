@@ -143,10 +143,14 @@ export async function verifyOtp(input: VerifyOtpInput): Promise<VerifyOtpResult>
     throw Errors.otpInvalid();
   }
 
-  await prisma.otpCode.update({
-    where: { id: otp.id },
+  // Atomic consume: only one concurrent verify wins. If the row is already
+  // consumed (double-click, replay, network retry), treat this as an invalid
+  // code rather than issuing a second session from the same OTP.
+  const consumed = await prisma.otpCode.updateMany({
+    where: { id: otp.id, consumedAt: null },
     data: { consumedAt: new Date() },
   });
+  if (consumed.count === 0) throw Errors.otpInvalid();
 
   return { userId: otp.userId, email: normalizedEmail };
 }

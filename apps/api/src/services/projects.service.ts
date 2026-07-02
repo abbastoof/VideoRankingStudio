@@ -32,25 +32,33 @@ export async function listProjects(userId: string, query: ProjectListQuery) {
 }
 
 export async function createProject(userId: string, body: CreateProject) {
-  // Enforce monthly quota before we hit the DB.
-  await usage.assertWithinLimit(userId, 'VIDEOS_CREATED', 1);
+  // Atomic quota reservation. Prevents two concurrent creates from both
+  // slipping past the "check" phase of a legacy check-then-act pair.
+  await usage.assertAndIncrement(userId, 'VIDEOS_CREATED', 1);
 
   if (body.templateId) {
     const tpl = await prisma.template.findUnique({ where: { id: body.templateId } });
-    if (!tpl) throw Errors.notFound('Template');
+    if (!tpl) {
+      // Roll back the quota reservation so a bad templateId doesn't consume
+      // one of the user's monthly slots.
+      await usage.increment(userId, 'VIDEOS_CREATED', -1);
+      throw Errors.notFound('Template');
+    }
   }
 
-  const project = await projectsRepo.createProject(userId, {
-    title: body.title,
-    type: body.type,
-    aspectRatio: aspectFromZodEnum(body.aspectRatio),
-    templateId: body.templateId,
-    scriptText: body.scriptText,
-  });
-
-  await usage.increment(userId, 'VIDEOS_CREATED', 1);
-
-  return serializeSummary(project);
+  try {
+    const project = await projectsRepo.createProject(userId, {
+      title: body.title,
+      type: body.type,
+      aspectRatio: aspectFromZodEnum(body.aspectRatio),
+      templateId: body.templateId,
+      scriptText: body.scriptText,
+    });
+    return serializeSummary(project);
+  } catch (err) {
+    await usage.increment(userId, 'VIDEOS_CREATED', -1);
+    throw err;
+  }
 }
 
 export async function getProject(userId: string, id: string) {
@@ -78,10 +86,18 @@ export async function deleteProject(userId: string, id: string) {
 }
 
 export async function duplicateProject(userId: string, id: string) {
-  await usage.assertWithinLimit(userId, 'VIDEOS_CREATED', 1);
-  const copy = await projectsRepo.duplicateProject(userId, id);
-  if (!copy) throw Errors.projectNotFound();
-  await usage.increment(userId, 'VIDEOS_CREATED', 1);
+  await usage.assertAndIncrement(userId, 'VIDEOS_CREATED', 1);
+  let copy: Awaited<ReturnType<typeof projectsRepo.duplicateProject>> = null;
+  try {
+    copy = await projectsRepo.duplicateProject(userId, id);
+  } catch (err) {
+    await usage.increment(userId, 'VIDEOS_CREATED', -1);
+    throw err;
+  }
+  if (!copy) {
+    await usage.increment(userId, 'VIDEOS_CREATED', -1);
+    throw Errors.projectNotFound();
+  }
   return serializeSummary(copy);
 }
 
