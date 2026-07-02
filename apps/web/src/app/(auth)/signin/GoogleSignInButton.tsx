@@ -4,33 +4,46 @@ import { useState } from 'react';
 
 import { Button } from '@vrs/ui';
 
-import { clientSdk } from '@/lib/client-sdk';
-
 export function GoogleSignInButton() {
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function go() {
     setBusy(true);
+    setErr(null);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/auth/google/authorize`, {
         credentials: 'include',
       });
+      if (!res.ok) {
+        setErr('Google sign-in is temporarily unavailable. Please use email instead.');
+        return;
+      }
       const data = (await res.json()) as { url?: string };
-      if (data.url) window.location.href = data.url;
+      if (!data.url) {
+        setErr('Google sign-in is temporarily unavailable. Please use email instead.');
+        return;
+      }
+      window.location.href = data.url;
+    } catch {
+      setErr('Could not reach the sign-in service. Check your connection and try again.');
     } finally {
       setBusy(false);
     }
   }
 
-  // Only expose if the backend is configured. We probe cheaply by relying on
-  // the same-origin fetch to succeed even without creds.
-  void clientSdk;
-
   return (
-    <Button variant="outline" size="lg" fullWidth loading={busy} onClick={go}>
-      <GoogleGlyph className="h-4 w-4" />
-      Continue with Google
-    </Button>
+    <div className="space-y-2">
+      <Button variant="outline" size="lg" fullWidth loading={busy} onClick={go}>
+        <GoogleGlyph className="h-4 w-4" />
+        Continue with Google
+      </Button>
+      {err ? (
+        <p role="alert" className="text-xs text-danger">
+          {err}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
