@@ -7,6 +7,7 @@ import { env } from '../config/env';
 import { prisma } from '../config/db';
 import { Errors } from '../lib/errors';
 import { requireAuth } from '../middleware/auth';
+import { audit } from '../services/audit.service';
 import { revokeAllSessionsForUser, revokeSession } from '../services/auth.service';
 
 const REFRESH_COOKIE = `${env.SESSION_COOKIE_NAME}_refresh`;
@@ -117,6 +118,15 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       // browser doesn't loop between the (auth) group and the protected
       // route group on the next navigation.
       if (id === req.auth!.sid) clearSessionCookies(reply);
+      audit({
+        actorId: req.auth!.sub,
+        action: 'session.revoked',
+        targetType: 'session',
+        targetId: id,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+        meta: { self: id === req.auth!.sid },
+      });
       reply.code(204).send();
     },
   });
@@ -128,6 +138,12 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       // Revoke-all kills the caller's session too — clear cookies to prevent
       // a redirect loop against the presence-only web middleware.
       clearSessionCookies(reply);
+      audit({
+        actorId: req.auth!.sub,
+        action: 'session.revoked_all',
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
       return { ok: true as const };
     },
   });
@@ -143,6 +159,14 @@ export async function usersRoutes(app: FastifyInstance): Promise<void> {
       });
       await revokeAllSessionsForUser(req.auth!.sub);
       clearSessionCookies(reply);
+      audit({
+        actorId: req.auth!.sub,
+        action: 'account.self_deleted',
+        targetType: 'user',
+        targetId: req.auth!.sub,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
       reply.code(204).send();
     },
   });
