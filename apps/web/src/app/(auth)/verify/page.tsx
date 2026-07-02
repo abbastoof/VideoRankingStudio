@@ -11,11 +11,25 @@ import { api, ApiError } from '@/lib/api';
 
 const CODE_LENGTH = 6;
 
+/**
+ * `next` comes from a URL param and is used to redirect after sign-in. If we
+ * blindly navigated to it we'd have an open redirect — a phisher could send
+ * `?next=https://evil.example` and bounce authenticated users off-site.
+ * Accept only same-origin, path-only values. Anything else falls back to
+ * the safe default.
+ */
+function safeNext(raw: string | null): string {
+  if (!raw) return '/dashboard';
+  if (!raw.startsWith('/')) return '/dashboard';
+  if (raw.startsWith('//')) return '/dashboard'; // protocol-relative
+  return raw;
+}
+
 export default function VerifyPage() {
   const router = useRouter();
   const params = useSearchParams();
   const email = params.get('email') ?? '';
-  const next = params.get('next') ?? '/dashboard';
+  const next = safeNext(params.get('next'));
 
   const [digits, setDigits] = useState<string[]>(() => Array.from({ length: CODE_LENGTH }, () => ''));
   const [serverError, setServerError] = useState<string | null>(null);
