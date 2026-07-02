@@ -112,7 +112,7 @@ jobs:
         run: mypy apps/workers/src --no-incremental
         continue-on-error: true
       - name: Tests
-        run: pytest apps/workers/tests || true
+        run: pytest apps/workers/tests
 
   docker:
     name: Build container images
@@ -170,4 +170,12 @@ jobs:
           format: sarif
           output: trivy-api.sarif
           severity: HIGH,CRITICAL
+        continue-on-error: true
+
+      - name: Upload Trivy scan results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-api.sarif
+          category: trivy-api
         continue-on-error: true
