@@ -245,8 +245,10 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: ${{ needs.resolve.outputs.env }}
+    # No AWS calls here — only public curl against the domain — so we skip
+    # id-token: write. Least privilege: the smoke job doesn't need OIDC
+    # tokens even though every earlier job does.
     permissions:
-      id-token: write
       contents: read
     steps:
       - name: Guard — APEX_DOMAIN present
