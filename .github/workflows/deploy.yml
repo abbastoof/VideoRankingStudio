@@ -10,7 +10,10 @@ on:
         description: Target environment
         required: true
         type: choice
-        options: [dev, staging, production]
+        # Keep this list in sync with infrastructure/terraform/envs/.
+        # Add `staging` back once envs/staging exists — dispatching to a
+        # nonexistent env silently fails at `terraform init`.
+        options: [dev, production]
         default: dev
 
 concurrency:
@@ -27,9 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       env: ${{ steps.env.outputs.env }}
-      needs_approval: ${{ steps.env.outputs.needs_approval }}
     steps:
       - id: env
+        # Approvals happen via GitHub's Environment protection rules on each
+        # downstream job's `environment:` binding — no need to plumb a boolean.
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "env=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
@@ -37,11 +41,6 @@ jobs:
             echo "env=production" >> $GITHUB_OUTPUT
           else
             echo "env=dev" >> $GITHUB_OUTPUT
-          fi
-          if [[ "${{ github.event.inputs.environment }}" == "production" || "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "needs_approval=true" >> $GITHUB_OUTPUT
-          else
-            echo "needs_approval=false" >> $GITHUB_OUTPUT
           fi
 
   terraform:
@@ -82,6 +81,12 @@ jobs:
     name: Deploy schema migrations
     needs: [resolve, terraform]
     runs-on: ubuntu-latest
+    # Bind to the target env so environment-scoped secrets
+    # (AWS_DEPLOY_ROLE_ARN, DB access) resolve. Without this binding, a
+    # per-env role kept as an environment secret would resolve to empty and
+    # the AWS credentials step would fail with a misleading error.
+    environment:
+      name: ${{ needs.resolve.outputs.env }}
     permissions:
       id-token: write
       contents: read
@@ -132,9 +137,12 @@ jobs:
     name: Roll new task definitions
     needs: [resolve, terraform, migrate]
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.resolve.outputs.env }}
     permissions:
       id-token: write
       contents: read
+      packages: read
     strategy:
       matrix:
         service: [api, web, workers]
@@ -155,6 +163,29 @@ jobs:
           else
             echo "tag=${GITHUB_SHA}" >> $GITHUB_OUTPUT
           fi
+
+      - name: Wait for CI image to be published
+        # Deploy triggers on the same push event as CI. CI's docker job runs
+        # in parallel and publishes ghcr.io/OWNER/REPO/SERVICE:${sha}
+        # asynchronously — without this poll, `update-service` fires against
+        # a tag that doesn't exist yet and ECS fails on image pull minutes
+        # later.
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ steps.image.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for i in $(seq 1 30); do
+            if docker manifest inspect "$IMAGE" >/dev/null 2>&1; then
+              echo "Image $IMAGE is available"
+              exit 0
+            fi
+            echo "Waiting for $IMAGE (attempt $i/30)…"
+            sleep 20
+          done
+          echo "Image $IMAGE never appeared — CI docker job likely failed or is stuck" >&2
+          exit 1
 
       - name: Update service to new image
         env:
@@ -198,6 +229,8 @@ jobs:
     name: Smoke checks
     needs: [resolve, ecs-deploy]
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ needs.resolve.outputs.env }}
     permissions:
       id-token: write
       contents: read
@@ -206,6 +239,11 @@ jobs:
         env:
           API_URL: https://api.${{ vars.APEX_DOMAIN }}
         run: |
+          set -euo pipefail
+          if [[ -z "${{ vars.APEX_DOMAIN }}" ]]; then
+            echo "vars.APEX_DOMAIN is not set for environment '${{ needs.resolve.outputs.env }}' — cannot smoke-test." >&2
+            exit 1
+          fi
           for i in 1 2 3 4 5; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/health")
             if [[ "$code" == "200" ]]; then
