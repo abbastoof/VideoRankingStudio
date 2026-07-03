@@ -1,4 +1,4 @@
-import type { HelmetOptions } from '@fastify/helmet';
+import type { FastifyHelmetOptions } from '@fastify/helmet';
 
 import { env } from './env';
 
@@ -71,7 +71,7 @@ function webSocketOrigins(): string[] {
   return Array.from(hosts);
 }
 
-export function buildHelmetOptions(): HelmetOptions {
+export function buildHelmetOptions(): FastifyHelmetOptions {
   const providers = providerHosts();
   const imageProviders = aiImageProviders();
   const telemetry = telemetryHosts();

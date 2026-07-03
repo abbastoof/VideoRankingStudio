@@ -136,7 +136,10 @@ async function publishViaAmqp(
         priority: priority ?? 0,
         headers: payload.headers,
       },
-      (err) => (err ? reject(err) : resolve()),
+      (err: unknown) =>
+        err
+          ? reject(err instanceof Error ? err : new Error(String(err)))
+          : resolve(),
     );
   });
 }

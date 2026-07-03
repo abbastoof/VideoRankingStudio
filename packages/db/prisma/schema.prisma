@@ -15,13 +15,19 @@
 generator client {
   provider        = "prisma-client-js"
   binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
-  previewFeatures = ["fullTextSearchPostgres", "metrics", "tracing"]
+  // `fullTextSearch` is Postgres-only in Prisma 5+; the older
+  // `fullTextSearchPostgres` name was retired.
+  // `postgresqlExtensions` is required so migrations emit
+  // `CREATE EXTENSION IF NOT EXISTS "citext"` — every User.email column
+  // uses @db.Citext and would otherwise fail to migrate on a fresh DB.
+  previewFeatures = ["fullTextSearch", "metrics", "tracing", "postgresqlExtensions"]
 }
 
 datasource db {
   provider          = "postgresql"
   url               = env("DATABASE_URL")
   shadowDatabaseUrl = env("DATABASE_URL_SHADOW")
+  extensions        = [citext]
 }
 
 // =============================================================================

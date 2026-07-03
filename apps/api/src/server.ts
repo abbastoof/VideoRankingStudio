@@ -7,7 +7,15 @@ import sensible from '@fastify/sensible';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import websocket from '@fastify/websocket';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, {
+  type FastifyBaseLogger,
+  type FastifyInstance,
+} from 'fastify';
+import {
+  jsonSchemaTransform,
+  serializerCompiler,
+  validatorCompiler,
+} from 'fastify-type-provider-zod';
 
 import { env } from './config/env';
 import { buildHelmetOptions } from './config/security';
@@ -39,14 +47,24 @@ import { voicesRoutes } from './routes/voices.routes';
 import { wsRoutes } from './routes/ws.routes';
 
 export async function buildServer(): Promise<FastifyInstance> {
+  // Passing a live pino Logger to Fastify narrows the `Logger` generic on
+  // the returned instance to pino.Logger; downstream helpers (registerMetrics,
+  // registerIdempotency, route plugins) expect the default FastifyBaseLogger.
+  // Cast the injected logger so the whole app graph agrees on one type.
   const app = Fastify({
-    loggerInstance: logger,
+    logger: logger as unknown as FastifyBaseLogger,
     trustProxy: true,
     bodyLimit: 10_485_760,
     genReqId: (req) => (req.headers['x-request-id'] as string | undefined) ?? crypto.randomUUID(),
     requestIdHeader: 'x-request-id',
     requestIdLogLabel: 'requestId',
   });
+
+  // Every route declares its body/params/query as Zod objects. Without a
+  // matching validator + serializer compiler Fastify assumes JSON-schema
+  // and blows up at boot with FST_ERR_SCH_VALIDATION_BUILD.
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
 
   await app.register(sensible);
   await app.register(helmet, buildHelmetOptions());
@@ -78,6 +96,7 @@ export async function buildServer(): Promise<FastifyInstance> {
         },
         servers: [{ url: env.API_URL }],
       },
+      transform: jsonSchemaTransform,
     });
     await app.register(swaggerUi, { routePrefix: '/docs' });
   }

@@ -21,6 +21,11 @@ FROM deps AS build
 COPY packages packages
 COPY apps/api apps/api
 RUN pnpm --filter @vrs/db generate
+# Build workspace libs before the API. api's tsconfig resolves @vrs/db and
+# @vrs/types against their `dist/` output; without this the API compile
+# fails with "Cannot find module '@vrs/db'".
+RUN pnpm --filter @vrs/types build
+RUN pnpm --filter @vrs/db build
 RUN pnpm --filter @vrs/api build
 
 # ---------- runtime ----------
@@ -35,6 +40,10 @@ RUN addgroup -S vrs && adduser -S vrs -G vrs
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/api/dist ./apps/api/dist
+# pnpm keeps per-package symlinks in apps/api/node_modules. Missing them means
+# require('ioredis') can't resolve — the root store has @pnpm/... virtual paths
+# but not the flat aliases the runtime code uses.
+COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/apps/api/package.json ./apps/api/
 COPY --from=build /app/package.json ./
 

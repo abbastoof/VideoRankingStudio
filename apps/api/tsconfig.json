@@ -1,11 +1,19 @@
 {
   "extends": "@vrs/config/tsconfig/node",
   "compilerOptions": {
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    // CommonJS output so Node can resolve extensionless imports at runtime.
+    // Node's strict ESM rejects `./config/redis` (no `.js`) and the source
+    // tree doesn't add extensions on relative imports.
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node"],
+    // API app isn't consumed as a library; suppressing declarations dodges
+    // TS2742 for Prisma-typed returns without needing every service to
+    // annotate its inferred type. Runtime behavior is unaffected.
+    "declaration": false,
+    "declarationMap": false
   },
   "include": ["src"]
 }

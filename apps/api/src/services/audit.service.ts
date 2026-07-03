@@ -1,3 +1,5 @@
+import type { Prisma } from '@vrs/db';
+
 import { prisma } from '../config/db';
 import { logger } from '../lib/logger';
 
@@ -26,7 +28,7 @@ export function audit(opts: AuditOpts): void {
         targetId: opts.targetId ?? null,
         ip: opts.ip ?? null,
         userAgent: opts.userAgent ?? null,
-        metaJson: opts.meta ?? {},
+        metaJson: (opts.meta ?? {}) as Prisma.InputJsonValue,
       },
     })
     .catch((err) => logger.warn({ err, action: opts.action }, 'audit.write_failed'));

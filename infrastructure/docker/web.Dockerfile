@@ -9,9 +9,14 @@ FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* .npmrc turbo.json tsconfig.base.json ./
 COPY apps/web/package.json apps/web/
-COPY packages/ui/package.json packages/ui/
-COPY packages/types/package.json packages/types/
+# All workspace packages @vrs/web transitively depends on. Missing any of
+# these breaks pnpm's workspace symlink resolution and Next then compiles
+# against an untyped SDK, which surfaces as "implicitly any" build errors.
 COPY packages/config/package.json packages/config/
+COPY packages/db/package.json packages/db/
+COPY packages/sdk/package.json packages/sdk/
+COPY packages/types/package.json packages/types/
+COPY packages/ui/package.json packages/ui/
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build

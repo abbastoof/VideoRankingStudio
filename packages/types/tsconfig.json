@@ -1,6 +1,10 @@
 {
   "extends": "@vrs/config/tsconfig/base",
   "compilerOptions": {
+    // Emit CommonJS so the API runtime can `require()` the compiled JS.
+    // Build-time consumers (Next, tsx, vitest) still resolve the .d.ts fine.
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "outDir": "dist",
     "rootDir": "src",
     "composite": true,

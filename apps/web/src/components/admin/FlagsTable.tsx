@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 
-import { Button } from '@vrs/ui';
-
 import { clientSdk } from '@/lib/client-sdk';
 
 interface Flag {

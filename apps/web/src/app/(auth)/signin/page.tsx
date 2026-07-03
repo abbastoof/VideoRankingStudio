@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { CheckCircle2, Info, Mail, ArrowRight } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -34,6 +34,26 @@ const formSchema = otpRequestSchema.pick({ email: true }).extend({
 type FormValues = z.infer<typeof formSchema>;
 
 export default function SignInPage() {
+  // useSearchParams must live inside a Suspense boundary or Next 14's static
+  // generation refuses to prerender the page.
+  return (
+    <Suspense fallback={<SignInFallback />}>
+      <SignInInner />
+    </Suspense>
+  );
+}
+
+function SignInFallback() {
+  return (
+    <div className="space-y-6" aria-busy>
+      <div className="h-8 w-40 rounded bg-surface-muted animate-pulse" />
+      <div className="h-10 rounded bg-surface-muted animate-pulse" />
+      <div className="h-11 rounded bg-surface-muted animate-pulse" />
+    </div>
+  );
+}
+
+function SignInInner() {
   const router = useRouter();
   const params = useSearchParams();
   const intent = params.get('intent') === 'signup' ? 'SIGN_UP' : 'SIGN_IN';

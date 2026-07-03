@@ -1,4 +1,4 @@
-import type { Prisma, ProjectStatus, ProjectType } from '@vrs/db';
+import { Prisma, type ProjectStatus, type ProjectType } from '@vrs/db';
 
 import { prisma } from '../config/db';
 

@@ -1,4 +1,4 @@
-import type { NotificationKind } from '@vrs/db';
+import type { NotificationKind, Prisma } from '@vrs/db';
 
 import { prisma } from '../config/db';
 import { logger } from '../lib/logger';
@@ -26,7 +26,7 @@ export function notify(opts: CreateNotificationOpts): void {
         title: opts.title,
         body: opts.body ?? null,
         link: opts.link ?? null,
-        metadataJson: opts.metadata ?? {},
+        metadataJson: (opts.metadata ?? {}) as Prisma.InputJsonValue,
       },
     })
     .catch((err) => logger.warn({ err, kind: opts.kind }, 'notification.write_failed'));

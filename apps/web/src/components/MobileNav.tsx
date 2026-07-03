@@ -57,6 +57,11 @@ export function MobileNav({
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     closeRef.current?.focus();
+    // Snapshot the trigger at effect-run time. The ref value can change by
+    // the time cleanup runs (React re-render, unmount) and the hooks linter
+    // is right to flag it — we want to restore focus to the trigger that
+    // *opened* the drawer, not whatever the ref points at during cleanup.
+    const triggerAtOpen = triggerRef.current;
 
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -91,7 +96,7 @@ export function MobileNav({
     return () => {
       document.body.style.overflow = prevOverflow;
       document.removeEventListener('keydown', onKey);
-      triggerRef.current?.focus();
+      triggerAtOpen?.focus();
     };
   }, [open]);
 

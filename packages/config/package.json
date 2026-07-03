@@ -12,7 +12,8 @@
     "./tsconfig/node": "./tsconfig/node.json",
     "./tsconfig/react": "./tsconfig/react.json",
     "./tsconfig/next": "./tsconfig/next.json",
-    "./tailwind/base": "./tailwind/base.cjs"
+    "./tailwind/base": "./tailwind/base.cjs",
+    "./tailwind/base.cjs": "./tailwind/base.cjs"
   },
   "files": ["eslint", "tsconfig", "tailwind"],
   "dependencies": {

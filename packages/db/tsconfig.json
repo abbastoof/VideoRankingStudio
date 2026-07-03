@@ -2,9 +2,15 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
+    // rootDir spans src + prisma so seed.ts is typecheckable, but tsc's
+    // emit stays namespaced under dist/src for the package's `main` and
+    // exports maps to work at runtime.
+    "rootDir": ".",
     "composite": true,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    // Emit CommonJS so the API runtime can `require('@vrs/db')`.
+    "module": "CommonJS",
+    "moduleResolution": "Node"
   },
   "include": ["src", "prisma"]
 }

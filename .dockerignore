@@ -12,6 +12,10 @@
 **/.turbo
 **/coverage
 **/.nyc_output
+# tsbuildinfo carries "already up-to-date" state from the host. Copying it
+# into the build stage makes `tsc` a no-op and leaves `dist/` empty — the
+# runtime COPY then fails with "not found".
+**/*.tsbuildinfo
 
 # Python bytecode
 **/__pycache__

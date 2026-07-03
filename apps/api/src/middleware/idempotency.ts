@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyRequest } from 'fastify';
 
 import { getRedis } from '../config/redis';
 import { Errors } from '../lib/errors';
@@ -44,7 +44,7 @@ interface CachedResponse {
 
 // Allow letters, digits, and the ASCII printables Stripe permits. Prevents
 // URLs, JWTs, or entire payloads being smuggled in as Idempotency-Key values.
-const KEY_FORMAT = /^[A-Za-z0-9_.:@\-]{1,255}$/;
+const KEY_FORMAT = /^[A-Za-z0-9_.:@-]{1,255}$/;
 
 function keyFor(scope: string, key: string): string {
   return `idem:${scope}:${key}`;

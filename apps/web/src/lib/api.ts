@@ -1,12 +1,13 @@
 /**
- * Typed fetcher for the VRS API.
+ * Typed fetcher for the VRS API, browser-safe.
  *
- * Works in both server and client components. Cookies are forwarded
- * automatically in the browser; on the server we read the incoming request's
- * cookie header via `next/headers`.
+ * Cookies are attached by the browser automatically via `credentials:
+ * 'include'`. Server components should use `@/lib/sdk`'s `serverClient()`
+ * instead, which forwards the incoming request's Cookie header via
+ * `next/headers`. Splitting them keeps `next/headers` out of the client
+ * bundle — importing it from a client-consumed module is a hard error under
+ * Next 14's boundary checks.
  */
-
-import { cookies } from 'next/headers';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -44,17 +45,6 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
   return url.toString();
 }
 
-function getCookieHeader(): string | undefined {
-  if (typeof window !== 'undefined') return undefined;
-  try {
-    // Only available in server components / route handlers.
-    const c = cookies();
-    return c.toString();
-  } catch {
-    return undefined;
-  }
-}
-
 export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, query, signal, noStore, headers = {} } = opts;
   const url = buildUrl(path, query);
@@ -64,14 +54,11 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
     ...headers,
   };
   if (body !== undefined) finalHeaders['Content-Type'] = 'application/json';
-  const cookieHeader = getCookieHeader();
-  if (cookieHeader) finalHeaders.Cookie = cookieHeader;
 
-  // Any request that forwards user cookies is per-request data — the Next
-  // fetch cache must never serve it to a different visitor. Default to
-  // no-store whenever a cookie is attached; callers can still opt in to
-  // caching explicitly on truly public GETs.
-  const shouldCache = !noStore && cookieHeader === undefined && method === 'GET';
+  // Browser-only fetcher — cookies attach automatically via credentials.
+  // Non-GET requests always bypass the Next fetch cache; opt into `default`
+  // for anonymous GETs only.
+  const shouldCache = !noStore && method === 'GET';
   const res = await fetch(url, {
     method,
     headers: finalHeaders,

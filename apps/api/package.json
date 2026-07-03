@@ -2,7 +2,6 @@
   "name": "@vrs/api",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",
@@ -26,8 +25,16 @@
     "@fastify/websocket": "^10.0.1",
     "@aws-sdk/client-s3": "^3.572.0",
     "@aws-sdk/s3-request-presigner": "^3.572.0",
+    "@opentelemetry/api": "1.8.0",
+    "@opentelemetry/auto-instrumentations-node": "0.46.1",
+    "@opentelemetry/exporter-trace-otlp-http": "0.51.1",
+    "@opentelemetry/resources": "1.24.1",
+    "@opentelemetry/sdk-node": "0.51.1",
+    "@opentelemetry/semantic-conventions": "1.24.1",
+    "@sentry/node": "^7.114.0",
     "@vrs/db": "workspace:*",
     "@vrs/types": "workspace:*",
+    "amqplib": "^0.10.4",
     "argon2": "^0.40.1",
     "fastify": "^4.27.0",
     "fastify-type-provider-zod": "^1.2.0",
@@ -41,6 +48,7 @@
     "zod": "^3.23.4"
   },
   "devDependencies": {
+    "@types/amqplib": "^0.10.5",
     "@types/node": "^20.11.30",
     "@types/nodemailer": "^6.4.14",
     "@vrs/config": "workspace:*",

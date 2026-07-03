@@ -16,7 +16,6 @@ export default async function BillingPage() {
     sdk.listInvoices(),
   ]);
 
-  const planByCode = new Map(plans.items.map((p) => [p.code, p]));
   const currentPlanCode = subscription?.planCode ?? 'FREE';
 
   return (

@@ -13,9 +13,17 @@ interface MinimalRegistry {
   metrics(): Promise<string> | string;
 }
 
+// Narrow accessor types over the prom-client concrete Counter/Histogram
+// classes. The full generic types leak label unions across the module
+// boundary; this indirection keeps the module facing consumers simple.
+type CounterLike = { inc: (labels?: Record<string, string | number>, value?: number) => void };
+type HistogramLike = {
+  observe: (labels: Record<string, string | number>, value: number) => void;
+};
+
 let _registry: MinimalRegistry | null = null;
-let _counters: Record<string, { inc: (labels?: Record<string, string>, value?: number) => void }> = {};
-let _histograms: Record<string, { observe: (labels: Record<string, string>, value: number) => void }> = {};
+const _counters: Record<string, CounterLike> = {};
+const _histograms: Record<string, HistogramLike> = {};
 
 async function initRegistry(): Promise<void> {
   try {
@@ -47,9 +55,13 @@ async function initRegistry(): Promise<void> {
     });
 
     _registry = registry;
-    _histograms.httpDuration = httpDuration;
-    _counters.httpTotal = httpTotal;
-    _counters.jobsEnqueued = jobsEnqueued;
+    // prom-client's Counter/Histogram carry a strongly-typed label union; the
+    // module-facing accessor types (Counter/HistogramLike) are the loose
+    // structural shape callers rely on. Both shapes accept the same runtime
+    // inputs so the cast is safe.
+    _histograms.httpDuration = httpDuration as unknown as HistogramLike;
+    _counters.httpTotal = httpTotal as unknown as CounterLike;
+    _counters.jobsEnqueued = jobsEnqueued as unknown as CounterLike;
   } catch {
     _registry = null;
   }

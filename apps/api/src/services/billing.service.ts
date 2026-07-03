@@ -265,7 +265,7 @@ async function recordInvoice(inv: Stripe.Invoice): Promise<void> {
       amountCents: inv.amount_paid || inv.amount_due,
       taxCents: inv.tax ?? 0,
       currency: inv.currency,
-      status: INVOICE_STATUS_MAP[inv.status ?? 'open'],
+      status: INVOICE_STATUS_MAP[inv.status ?? 'open'] ?? 'OPEN',
       hostedInvoiceUrl: inv.hosted_invoice_url ?? null,
       invoicePdfUrl: inv.invoice_pdf ?? null,
       periodStart: new Date(inv.period_start * 1000),
@@ -273,7 +273,7 @@ async function recordInvoice(inv: Stripe.Invoice): Promise<void> {
       paidAt: inv.status === 'paid' ? new Date(inv.status_transitions.paid_at ? inv.status_transitions.paid_at * 1000 : Date.now()) : null,
     },
     update: {
-      status: INVOICE_STATUS_MAP[inv.status ?? 'open'],
+      status: INVOICE_STATUS_MAP[inv.status ?? 'open'] ?? 'OPEN',
       amountCents: inv.amount_paid || inv.amount_due,
       hostedInvoiceUrl: inv.hosted_invoice_url ?? null,
       invoicePdfUrl: inv.invoice_pdf ?? null,

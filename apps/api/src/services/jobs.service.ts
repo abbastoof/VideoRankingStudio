@@ -1,4 +1,4 @@
-import type { AiJobKind } from '@vrs/db';
+import type { AiJobKind, Prisma } from '@vrs/db';
 
 import { prisma } from '../config/db';
 import { Errors } from '../lib/errors';
@@ -37,7 +37,7 @@ export async function enqueue(opts: EnqueueOpts) {
       status: 'QUEUED',
       priority: opts.priority ?? 50,
       maxAttempts: opts.maxAttempts ?? 3,
-      payloadJson: opts.payload,
+      payloadJson: opts.payload as Prisma.InputJsonValue,
       idempotencyKey: opts.idempotencyKey ?? null,
     },
   });

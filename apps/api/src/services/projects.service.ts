@@ -1,3 +1,4 @@
+import type { Prisma } from '@vrs/db';
 import type { CreateProject, ProjectListQuery, UpdateProject } from '@vrs/types';
 
 import { prisma } from '../config/db';
@@ -74,7 +75,9 @@ export async function updateProject(userId: string, id: string, body: UpdateProj
     ...(body.aspectRatio !== undefined ? { aspectRatio: body.aspectRatio } : {}),
     ...(body.scriptText !== undefined ? { scriptText: body.scriptText } : {}),
     ...(body.pinned !== undefined ? { pinned: body.pinned } : {}),
-    ...(body.settingsJson !== undefined ? { settingsJson: body.settingsJson } : {}),
+    ...(body.settingsJson !== undefined
+      ? { settingsJson: body.settingsJson as Prisma.InputJsonValue }
+      : {}),
   });
   if (res.count === 0) throw Errors.projectNotFound();
   return getProject(userId, id);

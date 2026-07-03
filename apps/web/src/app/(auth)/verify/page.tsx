@@ -2,7 +2,7 @@
 
 import { ArrowRight, ShieldCheck } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@vrs/ui';
 import type { AuthSession, OtpRequestResponse } from '@vrs/types';
@@ -26,6 +26,25 @@ function safeNext(raw: string | null): string {
 }
 
 export default function VerifyPage() {
+  // useSearchParams needs a Suspense boundary for Next 14 static generation.
+  return (
+    <Suspense fallback={<VerifyFallback />}>
+      <VerifyInner />
+    </Suspense>
+  );
+}
+
+function VerifyFallback() {
+  return (
+    <div className="space-y-6" aria-busy>
+      <div className="h-8 w-40 rounded bg-surface-muted animate-pulse" />
+      <div className="h-14 rounded bg-surface-muted animate-pulse" />
+      <div className="h-11 rounded bg-surface-muted animate-pulse" />
+    </div>
+  );
+}
+
+function VerifyInner() {
   const router = useRouter();
   const params = useSearchParams();
   const email = params.get('email') ?? '';

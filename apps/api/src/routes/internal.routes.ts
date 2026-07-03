@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
+import type { Prisma } from '@vrs/db';
+
 import { prisma } from '../config/db';
 import { Errors } from '../lib/errors';
 import { requireInternal } from '../middleware/auth';
@@ -220,7 +222,7 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
             text: s.text,
             speakerLabel: s.speakerLabel ?? null,
             confidence: s.confidence ?? null,
-            wordsJson: s.words ?? undefined,
+            wordsJson: (s.words ?? undefined) as Prisma.InputJsonValue | undefined,
           })),
         });
       });

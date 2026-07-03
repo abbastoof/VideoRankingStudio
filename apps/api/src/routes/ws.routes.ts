@@ -74,7 +74,7 @@ export async function wsRoutes(app: FastifyInstance): Promise<void> {
     connection.socket.on('close', () => {
       void sub.quit();
     });
-    connection.socket.on('error', (err) => logger.warn({ err }, 'ws.error'));
+    connection.socket.on('error', (err: unknown) => logger.warn({ err }, 'ws.error'));
 
     connection.socket.send(JSON.stringify({ type: 'hello', projectId }));
   });
