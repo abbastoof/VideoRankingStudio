@@ -157,12 +157,11 @@ jobs:
 
       - name: Compute image tag
         id: image
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=${GITHUB_SHA}" >> $GITHUB_OUTPUT
-          fi
+        # Always resolve to the commit SHA, even for a v-tag deploy. CI
+        # publishes images tagged with the SHA only (it doesn't run on tag
+        # pushes), and a tag's `github.sha` is the commit the tag points at,
+        # so the SHA-tagged image already exists in GHCR when the tag ships.
+        run: echo "tag=${GITHUB_SHA}" >> $GITHUB_OUTPUT
 
       - name: Wait for CI image to be published
         # Deploy triggers on the same push event as CI. CI's docker job runs
@@ -235,15 +234,19 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - name: Smoke — API root
-        env:
-          API_URL: https://api.${{ vars.APEX_DOMAIN }}
+      - name: Guard — APEX_DOMAIN present
         run: |
           set -euo pipefail
           if [[ -z "${{ vars.APEX_DOMAIN }}" ]]; then
             echo "vars.APEX_DOMAIN is not set for environment '${{ needs.resolve.outputs.env }}' — cannot smoke-test." >&2
             exit 1
           fi
+
+      - name: Smoke — API /health
+        env:
+          API_URL: https://api.${{ vars.APEX_DOMAIN }}
+        run: |
+          set -euo pipefail
           for i in 1 2 3 4 5; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "$API_URL/health")
             if [[ "$code" == "200" ]]; then
@@ -254,4 +257,24 @@ jobs:
             sleep 10
           done
           echo "API failed to become ready" >&2
+          exit 1
+
+      - name: Smoke — web root
+        # Silent regression on the web tier was invisible when only the API
+        # was smoked. A 5xx from the front door blocks users from ever
+        # reaching the API, so surface it here.
+        env:
+          WEB_URL: https://${{ vars.APEX_DOMAIN }}
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$WEB_URL/")
+            if [[ "$code" == "200" ]]; then
+              echo "Web healthy"
+              exit 0
+            fi
+            echo "Web not ready ($code), sleeping…"
+            sleep 10
+          done
+          echo "Web failed to become ready" >&2
           exit 1
