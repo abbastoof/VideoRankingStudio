@@ -130,7 +130,16 @@ jobs:
           HOST=$(aws rds describe-db-clusters \
             --db-cluster-identifier vrs-${{ needs.resolve.outputs.env }}-postgres \
             --query 'DBClusters[0].Endpoint' --output text)
-          export DATABASE_URL="postgresql://$USER:$PASS@$HOST:5432/$DBN"
+          # RDS auto-generated master passwords include URL-reserved
+          # characters (# ? / : etc.). Pasting the raw value into the URL
+          # makes Prisma's URI parser misread it — a `#` truncates the
+          # password into a URL fragment, a `?` starts a query string, etc.
+          # Encode every URL-reserved char before interpolation.
+          USER_ENC=$(jq -rn --arg v "$USER" '$v | @uri')
+          PASS_ENC=$(jq -rn --arg v "$PASS" '$v | @uri')
+          DBN_ENC=$(jq -rn --arg v "$DBN" '$v | @uri')
+          echo "::add-mask::$PASS_ENC"
+          export DATABASE_URL="postgresql://$USER_ENC:$PASS_ENC@$HOST:5432/$DBN_ENC"
           pnpm db:migrate:deploy
 
   ecs-deploy:
