@@ -30,18 +30,31 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       env: ${{ steps.env.outputs.env }}
+      name_prefix: ${{ steps.env.outputs.name_prefix }}
     steps:
       - id: env
-        # Approvals happen via GitHub's Environment protection rules on each
-        # downstream job's `environment:` binding — no need to plumb a boolean.
+        # `env` names the GitHub Environment for protection-rule binding and
+        # Terraform folder selection.
+        # `name_prefix` is the AWS-resource naming convention Terraform uses
+        # (`vrs-prod` and `vrs-dev`, not `vrs-production`). Every AWS lookup —
+        # cluster identifier, secret id, ECS service, ECS cluster — MUST use
+        # this prefix, or `describe-*` returns not-found and the deploy dies
+        # with a misleading error.
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "env=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+            ENV="${{ github.event.inputs.environment }}"
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            echo "env=production" >> $GITHUB_OUTPUT
+            ENV="production"
           else
-            echo "env=dev" >> $GITHUB_OUTPUT
+            ENV="dev"
           fi
+          case "$ENV" in
+            production) NAME_PREFIX="vrs-prod" ;;
+            dev)        NAME_PREFIX="vrs-dev" ;;
+            *) echo "Unknown env: $ENV" >&2; exit 1 ;;
+          esac
+          echo "env=$ENV" >> $GITHUB_OUTPUT
+          echo "name_prefix=$NAME_PREFIX" >> $GITHUB_OUTPUT
 
   terraform:
     name: Terraform apply
@@ -118,17 +131,19 @@ jobs:
         # The DATABASE_URL is resolved and consumed in a single step so the
         # password never crosses a GitHub Actions output boundary (masked
         # logs still expose values to downstream jobs).
+        env:
+          NAME_PREFIX: ${{ needs.resolve.outputs.name_prefix }}
         run: |
           set -euo pipefail
           DB_JSON=$(aws secretsmanager get-secret-value \
-            --secret-id vrs-${{ needs.resolve.outputs.env }}/db-master \
+            --secret-id "$NAME_PREFIX/db-master" \
             --query SecretString --output text)
           USER=$(echo "$DB_JSON" | jq -r .username)
           PASS=$(echo "$DB_JSON" | jq -r .password)
           DBN=$(echo "$DB_JSON" | jq -r .dbname)
           echo "::add-mask::$PASS"
           HOST=$(aws rds describe-db-clusters \
-            --db-cluster-identifier vrs-${{ needs.resolve.outputs.env }}-postgres \
+            --db-cluster-identifier "${NAME_PREFIX}-postgres" \
             --query 'DBClusters[0].Endpoint' --output text)
           # RDS auto-generated master passwords include URL-reserved
           # characters (# ? / : etc.). Pasting the raw value into the URL
@@ -197,8 +212,8 @@ jobs:
 
       - name: Update service to new image
         env:
-          ENV: ${{ needs.resolve.outputs.env }}
-          SERVICE: vrs-${{ needs.resolve.outputs.env }}-${{ matrix.service }}
+          NAME_PREFIX: ${{ needs.resolve.outputs.name_prefix }}
+          SERVICE: ${{ needs.resolve.outputs.name_prefix }}-${{ matrix.service }}
           IMAGE: ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ steps.image.outputs.tag }}
         # Rebuild the task definition by copying every field from the current
         # revision and swapping the container image. Using a deny-list of
@@ -211,7 +226,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          CLUSTER=vrs-${ENV}
+          CLUSTER="$NAME_PREFIX"
           TASK_ARN=$(aws ecs describe-services \
             --cluster "$CLUSTER" \
             --services "$SERVICE" \
