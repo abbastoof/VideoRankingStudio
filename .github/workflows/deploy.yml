@@ -191,6 +191,14 @@ jobs:
           ENV: ${{ needs.resolve.outputs.env }}
           SERVICE: vrs-${{ needs.resolve.outputs.env }}-${{ matrix.service }}
           IMAGE: ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ steps.image.outputs.tag }}
+        # Rebuild the task definition by copying every field from the current
+        # revision and swapping the container image. Using a deny-list of
+        # AWS-managed fields (deleted before re-register) instead of the older
+        # allow-list preserves anything Terraform adds later — ephemeral
+        # storage, proxy config, pid mode — without needing a workflow edit.
+        # `--include TAGS` on describe pulls the task-def tags so we can
+        # re-attach them on register; without it Terraform-managed tags were
+        # silently dropped on every deploy.
         run: |
           set -euo pipefail
 
@@ -200,20 +208,27 @@ jobs:
             --services "$SERVICE" \
             --query 'services[0].taskDefinition' --output text)
 
-          TASK_JSON=$(aws ecs describe-task-definition --task-definition "$TASK_ARN")
+          TASK_JSON=$(aws ecs describe-task-definition \
+            --task-definition "$TASK_ARN" \
+            --include TAGS)
+
           NEW_JSON=$(jq --arg img "$IMAGE" '
             .taskDefinition
-            | {
-                family, taskRoleArn, executionRoleArn, networkMode,
-                containerDefinitions: (.containerDefinitions | map(.image = $img)),
-                volumes, placementConstraints, requiresCompatibilities,
-                cpu, memory, runtimePlatform
-              }
-            | with_entries(select(.value != null))
+            | del(
+                .taskDefinitionArn, .revision, .status,
+                .requiresAttributes, .compatibilities,
+                .registeredAt, .registeredBy
+              )
+            | .containerDefinitions |= map(.image = $img)
+            # Preserve tags at the top level (register-task-definition wants
+            # them as a sibling of taskDefinition fields, not nested).
           ' <<< "$TASK_JSON")
 
+          TAGS_JSON=$(jq -c '.tags // []' <<< "$TASK_JSON")
+          INPUT_JSON=$(jq --argjson tags "$TAGS_JSON" '. + { tags: $tags }' <<< "$NEW_JSON")
+
           NEW_ARN=$(aws ecs register-task-definition \
-            --cli-input-json "$NEW_JSON" \
+            --cli-input-json "$INPUT_JSON" \
             --query 'taskDefinition.taskDefinitionArn' --output text)
 
           aws ecs update-service \
