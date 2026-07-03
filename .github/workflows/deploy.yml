@@ -84,10 +84,18 @@ jobs:
 
       - name: Terraform plan
         working-directory: infrastructure/terraform/envs/${{ needs.resolve.outputs.env }}
+        # `hosted_zone_name` is a required variable in envs/production/main.tf.
+        # envs/dev has it optional (default "") — Terraform silently ignores
+        # the TF_VAR for envs that don't declare the variable, so it's safe
+        # to set unconditionally.
+        env:
+          TF_VAR_hosted_zone_name: ${{ vars.APEX_DOMAIN }}
         run: terraform plan -input=false -out=plan.tfplan
 
       - name: Terraform apply
         working-directory: infrastructure/terraform/envs/${{ needs.resolve.outputs.env }}
+        env:
+          TF_VAR_hosted_zone_name: ${{ vars.APEX_DOMAIN }}
         run: terraform apply -input=false -auto-approve plan.tfplan
 
   migrate:

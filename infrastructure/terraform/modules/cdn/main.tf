@@ -133,17 +133,10 @@ resource "aws_cloudfront_distribution" "this" {
     minimum_protocol_version       = local.use_default_cert ? "TLSv1" : "TLSv1.2_2021"
   }
 
-  logging_config {
-    include_cookies = false
-    bucket          = "" # attach a logs bucket via override in envs/production if desired
-    prefix          = ""
-  }
-
-  # Terraform validates the logging_config block even when we don't use it;
-  # a zeroed bucket string disables it in practice.
-  lifecycle {
-    ignore_changes = [logging_config]
-  }
+  # Access logging is off by default. Attach a logs bucket via a stack
+  # override in envs/production if desired — an empty `bucket = ""` here
+  # fails CloudFront's API validation ("bucket must be a fully qualified
+  # S3 bucket domain") on create, so the block is omitted entirely.
 }
 
 # ─── S3 bucket policy allowing only the CloudFront distribution to read ──

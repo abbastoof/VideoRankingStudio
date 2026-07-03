@@ -102,6 +102,25 @@ resource "aws_rds_cluster" "this" {
   }
 }
 
+resource "aws_iam_role" "rds_monitoring" {
+  name = "${var.name}-rds-monitoring"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "monitoring.rds.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy_attachment" "rds_monitoring" {
+  role       = aws_iam_role.rds_monitoring.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+}
+
 resource "aws_rds_cluster_instance" "writer" {
   identifier         = "${var.name}-writer"
   cluster_identifier = aws_rds_cluster.this.id
@@ -110,8 +129,13 @@ resource "aws_rds_cluster_instance" "writer" {
   engine_version     = aws_rds_cluster.this.engine_version
 
   performance_insights_enabled = true
-  monitoring_interval          = 30
-  tags                         = local.common_tags
+  # RDS enhanced monitoring at any non-zero interval requires an IAM role
+  # with the AWS-managed AmazonRDSEnhancedMonitoringRole policy. Setting
+  # monitoring_interval without supplying monitoring_role_arn fails apply
+  # with InvalidParameterCombination — the observed dev-deploy blocker.
+  monitoring_interval = 30
+  monitoring_role_arn = aws_iam_role.rds_monitoring.arn
+  tags                = local.common_tags
 }
 
 output "endpoint"          { value = aws_rds_cluster.this.endpoint }

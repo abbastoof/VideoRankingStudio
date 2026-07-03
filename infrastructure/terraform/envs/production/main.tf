@@ -23,8 +23,10 @@ provider "aws" {
 
 variable "region"           { type = string, default = "us-east-1" }
 variable "name_prefix"      { type = string, default = "vrs-prod" }
+# Supplied at apply time by CI via TF_VAR_hosted_zone_name (= vars.APEX_DOMAIN).
+# Kept as a required variable so plan/apply fail fast if the CI wiring is
+# broken instead of silently applying an empty-zone plan.
 variable "hosted_zone_name" { type = string }
-variable "acm_cert_arn"     { type = string }
 
 locals {
   azs = ["${var.region}a", "${var.region}b", "${var.region}c"]
@@ -92,7 +94,11 @@ resource "aws_lb_listener" "https" {
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = var.acm_cert_arn
+  # The DNS module owns the ACM certificate for the apex + api + www names.
+  # Using it here removes the "two certs configured" split we had between
+  # the ALB and CloudFront, and drops the previously-required
+  # `var.acm_cert_arn` that the CI pipeline had no wiring for.
+  certificate_arn   = module.dns.certificate_arn
 
   default_action {
     type = "fixed-response"
