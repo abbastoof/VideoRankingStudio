@@ -87,13 +87,14 @@ const envSchema = z.object({
   STABILITY_API_KEY: z.string().optional(),
   VIDEO_GEN_PROVIDER: z.enum(['runway', 'pika', 'replicate', 'disabled']).default('disabled'),
 
-  // OAuth providers
+  // OAuth providers. Names below match the vars the OAuth service reads
+  // (some via `env`, some via `process.env` for the publish-target flows).
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
   YOUTUBE_OAUTH_CLIENT_ID: z.string().optional(),
   YOUTUBE_OAUTH_CLIENT_SECRET: z.string().optional(),
-  TIKTOK_OAUTH_CLIENT_KEY: z.string().optional(),
-  TIKTOK_OAUTH_CLIENT_SECRET: z.string().optional(),
+  TIKTOK_CLIENT_KEY: z.string().optional(),
+  TIKTOK_CLIENT_SECRET: z.string().optional(),
 
   // Internal
   INTERNAL_SERVICE_TOKEN: z.string().min(16),
