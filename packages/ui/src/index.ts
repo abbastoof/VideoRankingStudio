@@ -19,3 +19,24 @@ export {
   useConfirm,
   type ConfirmOptions,
 } from './components/Dialog';
+export { Switch, type SwitchProps } from './components/Switch';
+export { Slider, type SliderProps } from './components/Slider';
+export { Select, type SelectProps } from './components/Select';
+export { ColorPicker, type ColorPickerProps } from './components/ColorPicker';
+export {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  type TabsProps,
+  type TabsTriggerProps,
+  type TabsContentProps,
+} from './components/Tabs';
+export {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+  type CollapsibleProps,
+  type CollapsibleTriggerProps,
+} from './components/Collapsible';
+export { Dropzone, type DropzoneProps } from './components/Dropzone';

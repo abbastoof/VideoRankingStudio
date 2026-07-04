@@ -44,4 +44,31 @@
     );
     background-size: 200% 100%;
   }
+
+  /* Styled native range input used by the Slider component. The track fill
+     is painted inline (linear-gradient on the element background). */
+  .vrs-slider {
+    @apply h-1.5 cursor-pointer appearance-none rounded-full;
+  }
+  .vrs-slider:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+  .vrs-slider:focus-visible {
+    @apply outline-none ring-2 ring-brand-400 ring-offset-2 ring-offset-background;
+  }
+  .vrs-slider::-webkit-slider-thumb {
+    @apply h-4 w-4 appearance-none rounded-full border border-border-strong bg-white shadow-sm;
+    margin-top: 0;
+    transition: transform 120ms ease-out;
+  }
+  .vrs-slider::-webkit-slider-thumb:active {
+    transform: scale(1.15);
+  }
+  .vrs-slider::-moz-range-thumb {
+    @apply h-4 w-4 rounded-full border border-border-strong bg-white shadow-sm;
+    transition: transform 120ms ease-out;
+  }
+  .vrs-slider::-moz-range-thumb:active {
+    transform: scale(1.15);
+  }
 }
