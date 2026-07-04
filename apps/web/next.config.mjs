@@ -6,8 +6,10 @@ const nextConfig = {
   poweredByHeader: false,
   // Required for the Docker runtime image, which copies `.next/standalone`.
   // Without `output: 'standalone'`, `pnpm build` doesn't emit that bundle
-  // and the production container COPY fails.
-  output: 'standalone',
+  // and the production container COPY fails. NEXT_STANDALONE=0 opts out for
+  // local builds on Windows, where the standalone tracer needs symlink
+  // permission (Developer Mode) that most machines don't have.
+  output: process.env.NEXT_STANDALONE === '0' ? undefined : 'standalone',
   experimental: {
     typedRoutes: true,
     serverActions: { bodySizeLimit: '2mb' },

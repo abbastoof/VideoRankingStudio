@@ -53,10 +53,14 @@
   /* Shape */
   --radius: 0.5rem; /* 8px */
 
-  /* Typography */
+  /* Typography. --font-sans / --font-mono / --font-archivo-black /
+     --font-rubik are overridden at the html root by next/font, which swaps
+     in the self-hosted files; the values here are no-JS fallbacks. */
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-display: 'Inter Display', var(--font-sans);
+  --font-display: var(--font-sans);
+  --font-archivo-black: 'Archivo Black', Impact, sans-serif;
+  --font-rubik: 'Rubik', var(--font-sans);
 }
 
 [data-theme='dark'],

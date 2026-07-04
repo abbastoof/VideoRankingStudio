@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 
 import { QueryProvider } from '@/components/QueryProvider';
+import { archivoBlack, rubik } from '@/lib/fonts';
 import { SentryClientInit } from '@/lib/sentry';
 
 import './globals.css';
@@ -47,7 +48,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${mono.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${inter.variable} ${mono.variable} ${archivoBlack.variable} ${rubik.variable}`}
+      suppressHydrationWarning
+    >
       <body className="min-h-screen bg-background text-foreground antialiased">
         <SentryClientInit />
         <QueryProvider>{children}</QueryProvider>

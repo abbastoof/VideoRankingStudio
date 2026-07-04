@@ -65,6 +65,8 @@ module.exports = {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
         display: ['var(--font-display)', 'var(--font-sans)', 'system-ui'],
+        'archivo-black': ['var(--font-archivo-black)', 'Impact', 'sans-serif'],
+        rubik: ['var(--font-rubik)', 'var(--font-sans)', 'sans-serif'],
       },
       fontSize: {
         '2xs': ['0.6875rem', { lineHeight: '0.875rem' }],
