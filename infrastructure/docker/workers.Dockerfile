@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       curl \
       ca-certificates \
       libgomp1 \
+      fontconfig \
    && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build
@@ -24,6 +25,13 @@ RUN useradd --create-home --shell /bin/bash vrs
 COPY --from=build /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=build /usr/local/bin /usr/local/bin
 COPY apps/workers/src /app/src
+COPY apps/workers/assets /app/assets
+
+# Register the bundled fonts with fontconfig so libass caption burn-in can
+# resolve them by family name; the Pillow text renderer loads them by path.
+RUN mkdir -p /usr/share/fonts/truetype/vrs \
+ && cp /app/assets/fonts/*.ttf /usr/share/fonts/truetype/vrs/ \
+ && fc-cache -f
 
 ENV PYTHONPATH=/app/src
 USER vrs

@@ -19,6 +19,7 @@ from ..compose import ASPECT_TO_WH, ComposeSpec, build_command, run
 from ..config import settings
 from ..logging import logger
 from ..storage import download_to, upload_file
+from ..text_render import render_text_clips
 from ._base import job_lifecycle, succeed
 
 
@@ -48,6 +49,11 @@ def render_export(
             asset_paths, voiceover_paths = _download_media(timeline, work, report)
             caption_srt = _download_caption_srt(timeline, work)
 
+            report(0.4, "rendering text overlays")
+            text_paths = render_text_clips(
+                timeline, work, width=resolution_w, height=resolution_h
+            )
+
             report(0.42, "building filter graph")
             output = work / "out.mp4"
             spec = ComposeSpec(
@@ -63,6 +69,7 @@ def render_export(
                 background_music_path=None,  # explicit per-project music lands with the music picker
                 duck_music_against_voice=True,
                 caption_style=_caption_style(timeline),
+                background_color=_background_color(timeline),
             )
             built = build_command(
                 timeline=timeline,
@@ -70,6 +77,7 @@ def render_export(
                 voiceover_paths=voiceover_paths,
                 caption_srt_path=caption_srt,
                 spec=spec,
+                text_paths=text_paths,
             )
 
             report(0.5, "encoding")
@@ -171,6 +179,15 @@ def _caption_style(timeline: dict[str, Any]) -> dict[str, Any]:
         if cap.get("enabled") and cap.get("styleJson"):
             return cap["styleJson"]
     return {"fontFamily": "Inter", "fontSize": 48, "color": "#ffffff"}
+
+
+def _background_color(timeline: dict[str, Any]) -> str:
+    settings_json = timeline.get("settingsJson")
+    if isinstance(settings_json, dict):
+        color = settings_json.get("backgroundColor")
+        if isinstance(color, str) and color.strip():
+            return color
+    return "#000000"
 
 
 def _maybe_watermark_path(work: Path) -> Path | None:

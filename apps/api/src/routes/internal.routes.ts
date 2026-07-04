@@ -84,6 +84,8 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
         title: project.title,
         aspectRatio: project.aspectRatio,
         durationMs: project.durationMs,
+        // Project-level render settings (e.g. ranking backgroundColor).
+        settingsJson: project.settingsJson,
         tracks: project.tracks.map((t) => ({
           id: t.id,
           kind: t.kind,

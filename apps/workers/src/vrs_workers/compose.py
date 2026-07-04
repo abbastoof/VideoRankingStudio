@@ -51,10 +51,12 @@ ASPECT_TO_WH = {
 @dataclass
 class CompiledInput:
     """One `-i` argument for ffmpeg. `path` is the local file. `index` is the
-    stream index assigned by argument order."""
+    stream index assigned by argument order. `input_args` are per-input flags
+    emitted before `-i` (e.g. `-loop 1` for still images)."""
 
     path: Path
     index: int
+    input_args: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -72,6 +74,7 @@ class ComposeSpec:
     background_music_volume: float = 0.15
     duck_music_against_voice: bool = True
     caption_style: dict[str, Any] = field(default_factory=dict)
+    background_color: str = "#000000"
 
 
 @dataclass
@@ -87,11 +90,13 @@ def build_command(
     voiceover_paths: dict[str, Path],
     caption_srt_path: Path | None,
     spec: ComposeSpec,
+    text_paths: dict[str, Path] | None = None,
 ) -> BuildResult:
     tracks = _sorted_tracks(timeline)
     inputs: list[CompiledInput] = []
+    text_paths = text_paths or {}
 
-    # Assign a stable input index to every asset/voiceover we reference.
+    # Assign a stable input index to every asset/voiceover/text we reference.
     input_index: dict[str, int] = {}
     for track in tracks:
         for clip in track["clips"]:
@@ -99,11 +104,18 @@ def build_command(
             if key is None:
                 continue
             if key not in input_index:
-                path = _resolve_clip_path(clip, asset_paths, voiceover_paths)
+                path = _resolve_clip_path(clip, asset_paths, voiceover_paths, text_paths)
                 if path is None:
                     continue
                 input_index[key] = len(inputs)
-                inputs.append(CompiledInput(path=path, index=len(inputs)))
+                if _is_text_clip(clip):
+                    # Loop the still PNG for the clip window so overlay has
+                    # frames to consume; `enable` gates actual visibility.
+                    dur_s = clip["durationMs"] / 1000.0
+                    args = ["-loop", "1", "-framerate", str(spec.fps), "-t", f"{dur_s:.3f}"]
+                    inputs.append(CompiledInput(path=path, index=len(inputs), input_args=args))
+                else:
+                    inputs.append(CompiledInput(path=path, index=len(inputs)))
 
     if spec.background_music_path is not None:
         bg_idx = len(inputs)
@@ -123,8 +135,9 @@ def build_command(
 
     duration_s = timeline.get("durationMs", 0) / 1000.0 or 60.0
     canvas_label = "canvas"
+    canvas_color = _ffmpeg_color(spec.background_color)
     filter_parts.append(
-        f"color=c=black:size={spec.width}x{spec.height}:r={spec.fps}:d={duration_s}[{canvas_label}]"
+        f"color=c={canvas_color}:size={spec.width}x{spec.height}:r={spec.fps}:d={duration_s}[{canvas_label}]"
     )
 
     # ─── Video / overlay tracks (bottom-up compositing) ────────────────
@@ -138,11 +151,14 @@ def build_command(
                 continue
             src = input_index[key]
             lbl = f"vclip{src}_{clip['id'][:8]}"
-            filter_parts.append(
-                _video_clip_filter(clip, src, spec, out_label=lbl)
-            )
+            if _is_text_clip(clip):
+                filter_parts.append(_text_clip_filter(clip, src, spec, out_label=lbl))
+            else:
+                filter_parts.append(_video_clip_filter(clip, src, spec, out_label=lbl))
             merged = f"z{len(z_labels)}"
-            filter_parts.append(_overlay_filter(z_labels[-1], lbl, clip, out_label=merged))
+            filter_parts.append(
+                _overlay_filter(z_labels[-1], lbl, clip, spec, out_label=merged)
+            )
             z_labels.append(merged)
     video_labels.append(z_labels[-1])
 
@@ -170,6 +186,8 @@ def build_command(
         if track["kind"] not in ("VIDEO", "AUDIO"):
             continue
         for clip in track["clips"]:
+            if _is_text_clip(clip):
+                continue  # PNGs have no audio stream
             key = _clip_key(clip)
             if key is None or key not in input_index:
                 continue
@@ -219,7 +237,7 @@ def build_command(
 
     argv: list[str] = ["ffmpeg", "-hide_banner", "-loglevel", "warning", "-y"]
     for inp in inputs:
-        argv += ["-i", str(inp.path)]
+        argv += [*inp.input_args, "-i", str(inp.path)]
     argv += ["-filter_complex", filter_complex]
     argv += ["-map", f"[{final_video}]", "-map", f"[{final_audio}]"]
     argv += ["-r", str(spec.fps)]
@@ -255,7 +273,14 @@ def _sorted_tracks(timeline: dict[str, Any]) -> list[dict[str, Any]]:
     )
 
 
+def _is_text_clip(clip: dict[str, Any]) -> bool:
+    text_json = clip.get("textJson")
+    return bool(text_json and text_json.get("text"))
+
+
 def _clip_key(clip: dict[str, Any]) -> str | None:
+    if _is_text_clip(clip):
+        return f"text:{clip['id']}"
     if clip.get("asset"):
         return f"asset:{clip['asset']['id']}"
     if clip.get("voiceover"):
@@ -267,7 +292,10 @@ def _resolve_clip_path(
     clip: dict[str, Any],
     asset_paths: dict[str, Path],
     voiceover_paths: dict[str, Path],
+    text_paths: dict[str, Path],
 ) -> Path | None:
+    if _is_text_clip(clip):
+        return text_paths.get(clip["id"])
     if clip.get("asset"):
         return asset_paths.get(clip["asset"]["id"])
     if clip.get("voiceover"):
@@ -275,38 +303,103 @@ def _resolve_clip_path(
     return None
 
 
+def _transform(clip: dict[str, Any]) -> dict[str, Any]:
+    t = clip.get("transformJson")
+    return t if isinstance(t, dict) else {}
+
+
 def _video_clip_filter(
     clip: dict[str, Any], src: int, spec: ComposeSpec, out_label: str
 ) -> str:
-    """Trim, scale, and offset a single video clip to sit at its timeline slot."""
+    """Trim, scale, and offset a single video clip to sit at its timeline slot.
+
+    Without a transform the clip fills the canvas (scale-to-cover + crop).
+    With `transformJson.scale < 1` it letterboxes inside a box `scale` times
+    the canvas height (aspect preserved) and the overlay step centers it —
+    this is what "Video height %" maps to.
+    """
     start_s = clip["startMs"] / 1000.0
     in_s = clip.get("inMs", 0) / 1000.0
     duration_s = clip["durationMs"] / 1000.0
     speed = clip.get("speed", 1.0) or 1.0
+    transform = _transform(clip)
+    scale = float(transform.get("scale") or 1.0)
 
     parts = [
         f"[{src}:v]trim=start={in_s}:duration={duration_s * speed}",
         f"setpts=(PTS-STARTPTS)/{speed}",
-        f"scale={spec.width}:{spec.height}:force_original_aspect_ratio=increase",
-        f"crop={spec.width}:{spec.height}",
-        f"fps={spec.fps}",
-        f"setpts=PTS+{start_s}/TB",
     ]
+    if 0 < scale < 1:
+        box_h = max(2, int(spec.height * scale) // 2 * 2)
+        parts.append(
+            f"scale={spec.width}:{box_h}:force_original_aspect_ratio=decrease"
+        )
+    else:
+        parts.append(
+            f"scale={spec.width}:{spec.height}:force_original_aspect_ratio=increase"
+        )
+        parts.append(f"crop={spec.width}:{spec.height}")
+    parts.append(f"fps={spec.fps}")
+    parts.append(f"setpts=PTS+{start_s}/TB")
     if clip.get("opacity", 1.0) < 1.0:
         parts.append("format=yuva420p")
         parts.append(f"colorchannelmixer=aa={clip['opacity']:.3f}")
     return ",".join(parts) + f"[{out_label}]"
 
 
+def _text_clip_filter(
+    clip: dict[str, Any], src: int, spec: ComposeSpec, out_label: str
+) -> str:
+    """A pre-rendered canvas-sized PNG: normalize format/fps and shift into
+    its timeline slot. Position/size are baked into the image itself."""
+    start_s = clip["startMs"] / 1000.0
+    parts = [
+        f"[{src}:v]format=rgba",
+        f"fps={spec.fps}",
+        f"setpts=PTS-STARTPTS+{start_s}/TB",
+    ]
+    if clip.get("opacity", 1.0) < 1.0:
+        parts.append(f"colorchannelmixer=aa={clip['opacity']:.3f}")
+    return ",".join(parts) + f"[{out_label}]"
+
+
 def _overlay_filter(
-    base_label: str, top_label: str, clip: dict[str, Any], out_label: str
+    base_label: str,
+    top_label: str,
+    clip: dict[str, Any],
+    spec: ComposeSpec,
+    out_label: str,
 ) -> str:
     start_s = clip["startMs"] / 1000.0
     end_s = start_s + clip["durationMs"] / 1000.0
+    transform = _transform(clip)
+    scale = float(transform.get("scale") or 1.0)
+    if not _is_text_clip(clip) and 0 < scale < 1:
+        # Letterboxed clip: center it, then apply design-space pixel offsets
+        # (x/y are authored against the canonical canvas, same as fonts).
+        design_w = 1920 if spec.width > spec.height else 1080
+        px_scale = spec.width / design_w
+        dx = float(transform.get("x") or 0.0) * px_scale
+        dy = float(transform.get("y") or 0.0) * px_scale
+        pos = f"x=(W-w)/2+{dx:.1f}:y=(H-h)/2+{dy:.1f}"
+    else:
+        pos = "x=0:y=0"
     return (
-        f"[{base_label}][{top_label}]overlay="
+        f"[{base_label}][{top_label}]overlay={pos}:"
         f"enable='between(t,{start_s},{end_s})'[{out_label}]"
     )
+
+
+def _ffmpeg_color(value: str) -> str:
+    """`#rrggbb` → `0xRRGGBB` (ffmpeg color syntax); passes named colors through."""
+    v = (value or "").strip()
+    if v.startswith("#"):
+        h = v[1:]
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        if len(h) == 6:
+            return f"0x{h}"
+    return v or "black"
 
 
 def _audio_clip_filter(

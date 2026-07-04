@@ -39,6 +39,12 @@ export const clipTextSchema = z.object({
   background: z.string().nullable().default(null),
   align: z.enum(['left', 'center', 'right']).default('center'),
   animation: z.enum(['none', 'word-by-word', 'fade-in', 'pop']).default('none'),
+  /** Outline drawn around glyphs; width is design-space px (1080-wide canvas). */
+  strokeColor: z.string().default('#000000'),
+  strokeWidth: z.number().min(0).max(40).default(0),
+  /** Block-center position as % of canvas; null = alignment/center fallback. */
+  xPct: z.number().min(0).max(100).nullable().default(null),
+  yPct: z.number().min(0).max(100).nullable().default(null),
 });
 
 export const clipSchema = z.object({

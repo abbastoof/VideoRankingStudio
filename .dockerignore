@@ -17,13 +17,15 @@
 # runtime COPY then fails with "not found".
 **/*.tsbuildinfo
 
-# Python bytecode
+# Python bytecode / local environments
 **/__pycache__
 **/*.pyc
 **/*.pyo
 **/.mypy_cache
 **/.pytest_cache
 **/.ruff_cache
+**/.venv
+**/venv
 
 # Editor / OS
 .vscode
