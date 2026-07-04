@@ -101,6 +101,78 @@ export interface ExportDetail extends ExportSummary {
   expiresAt: string | null;
 }
 
+export interface RankingTitleStyle {
+  fontFamily?: string;
+  fontSize?: number;
+  bold?: boolean;
+  italic?: boolean;
+  color?: string;
+  background?: string | null;
+  strokeColor?: string;
+  strokeWidth?: number;
+  xPct?: number | null;
+  yPct?: number | null;
+}
+
+export interface RankingCandidateDetail {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  score: number;
+  assetId: string | null;
+  thumbnailKey: string | null;
+  sourceUrl: string | null;
+  trimStartMs: number | null;
+  trimEndMs: number | null;
+  volume: number;
+  metadataJson?: Record<string, unknown>;
+  assetStatus: string | null;
+  assetDurationMs: number | null;
+  assetUrl: string | null;
+  thumbnailUrl: string | null;
+}
+
+export interface RankingDetail {
+  projectId: string;
+  title: string;
+  aspectRatio: string;
+  order: 'asc' | 'desc';
+  orderMode: 'score' | 'custom';
+  headerText: string | null;
+  brandColor: string | null;
+  reveal: 'countdown' | 'topfirst';
+  titleStyle: RankingTitleStyle | null;
+  backgroundColor: string;
+  videoHeightPct: number;
+  captionsEnabled: boolean;
+  candidates: RankingCandidateDetail[];
+}
+
+export interface RankingMetaPatch {
+  order?: 'asc' | 'desc';
+  orderMode?: 'score' | 'custom';
+  headerText?: string | null;
+  brandColor?: string | null;
+  reveal?: 'countdown' | 'topfirst';
+  titleStyle?: RankingTitleStyle | null;
+  backgroundColor?: string | null;
+  videoHeightPct?: number | null;
+  captionsEnabled?: boolean;
+}
+
+export interface RankingCandidatePatch {
+  title?: string;
+  subtitle?: string | null;
+  score?: number;
+  assetId?: string | null;
+  thumbnailKey?: string | null;
+  sourceUrl?: string | null;
+  trimStartMs?: number | null;
+  trimEndMs?: number | null;
+  volume?: number;
+  metadataJson?: Record<string, unknown>;
+}
+
 export class VrsClient {
   constructor(private readonly opts: SdkOptions) {}
 
@@ -465,62 +537,15 @@ export class VrsClient {
     return this.request<{ id: string; title: string }>('POST', '/v1/rankings', { body });
   }
   getRanking(id: string) {
-    return this.request<{
-      projectId: string;
-      title: string;
-      aspectRatio: string;
-      order: 'asc' | 'desc';
-      headerText: string | null;
-      brandColor: string | null;
-      reveal: 'countdown' | 'topfirst';
-      candidates: Array<{
-        id: string;
-        title: string;
-        subtitle: string | null;
-        score: number;
-        assetId: string | null;
-        thumbnailKey: string | null;
-        sourceUrl: string | null;
-        thumbnailUrl: string | null;
-      }>;
-    }>('GET', `/v1/rankings/${id}`);
+    return this.request<RankingDetail>('GET', `/v1/rankings/${id}`);
   }
-  updateRanking(
-    id: string,
-    body: {
-      order?: 'asc' | 'desc';
-      headerText?: string | null;
-      brandColor?: string | null;
-      reveal?: 'countdown' | 'topfirst';
-    },
-  ) {
-    return this.request('PATCH', `/v1/rankings/${id}`, { body });
+  updateRanking(id: string, body: RankingMetaPatch) {
+    return this.request<RankingDetail>('PATCH', `/v1/rankings/${id}`, { body });
   }
-  addRankingCandidate(
-    id: string,
-    body: {
-      title: string;
-      subtitle?: string | null;
-      score: number;
-      assetId?: string | null;
-      thumbnailKey?: string | null;
-      sourceUrl?: string | null;
-    },
-  ) {
+  addRankingCandidate(id: string, body: RankingCandidatePatch & { title: string; score: number }) {
     return this.request<{ id: string }>('POST', `/v1/rankings/${id}/candidates`, { body });
   }
-  updateRankingCandidate(
-    id: string,
-    candidateId: string,
-    body: {
-      title?: string;
-      subtitle?: string | null;
-      score?: number;
-      assetId?: string | null;
-      thumbnailKey?: string | null;
-      sourceUrl?: string | null;
-    },
-  ) {
+  updateRankingCandidate(id: string, candidateId: string, body: RankingCandidatePatch) {
     return this.request('PATCH', `/v1/rankings/${id}/candidates/${candidateId}`, { body });
   }
   deleteRankingCandidate(id: string, candidateId: string) {

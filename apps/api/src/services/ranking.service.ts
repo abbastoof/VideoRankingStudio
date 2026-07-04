@@ -2,16 +2,18 @@
  * Ranking workflow.
  *
  * A ranking project is a Project of type=RANKING whose settingsJson carries:
- *   { candidates: [{ id, title, score, assetId, thumbnailKey, sourceUrl }],
- *     order: 'asc' | 'desc' }
+ *   { candidates: [...], order, orderMode, headerText, titleStyle,
+ *     backgroundColor, videoHeightPct, captionsEnabled, reveal, brandColor }
  *
  * Candidates are the items being ranked (products, videos, songs, etc.).
  * Each has a numeric score the creator assigns manually, or that we compute
- * from an imported metric (YouTube views, TikTok likes, etc.).
+ * from an imported metric (YouTube views, TikTok likes, etc.). With
+ * orderMode='custom' the stored array order wins instead of the score sort.
  *
- * The ranked-export path builds a full-timeline blueprint from the sorted
- * candidates and hands it to the standard export renderer. Nothing about the
- * FFmpeg compose graph needs to change.
+ * The ranked-export path builds a full-timeline blueprint from the ordered
+ * candidates and hands it to the standard export renderer: per slot a video
+ * clip (letterboxed at videoHeightPct), a stylized rank-number TEXT clip,
+ * and a video-title TEXT clip; plus an always-on ranking-title TEXT clip.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -31,16 +33,42 @@ export interface RankingCandidate {
   assetId?: string | null;
   thumbnailKey?: string | null;
   sourceUrl?: string | null;
+  trimStartMs?: number | null;
+  trimEndMs?: number | null;
+  volume?: number;
   metadataJson?: Record<string, unknown>;
+}
+
+export interface RankingTitleStyle {
+  fontFamily?: string;
+  fontSize?: number;
+  bold?: boolean;
+  italic?: boolean;
+  color?: string;
+  /** Pill behind the text; null/undefined = no background. */
+  background?: string | null;
+  strokeColor?: string;
+  strokeWidth?: number;
+  xPct?: number | null;
+  yPct?: number | null;
 }
 
 interface RankingSettings {
   candidates: RankingCandidate[];
   order: 'asc' | 'desc';
+  orderMode: 'score' | 'custom';
   headerText?: string;
   brandColor?: string;
   reveal?: 'countdown' | 'topfirst';
+  titleStyle?: RankingTitleStyle;
+  backgroundColor?: string;
+  videoHeightPct?: number;
+  captionsEnabled?: boolean;
 }
+
+const DEFAULT_SLOT_MS = 4200;
+const MIN_SLOT_MS = 1000;
+const MAX_SLOT_MS = 60_000;
 
 async function guard(userId: string, projectId: string) {
   const p = await prisma.project.findFirst({
@@ -55,14 +83,26 @@ async function guard(userId: string, projectId: string) {
 }
 
 function readSettings(project: { settingsJson: unknown }): RankingSettings {
-  const raw = (project.settingsJson as RankingSettings | null) ?? { candidates: [], order: 'desc' };
+  const raw = (project.settingsJson as Partial<RankingSettings> | null) ?? {};
   return {
     candidates: Array.isArray(raw.candidates) ? raw.candidates : [],
     order: raw.order === 'asc' ? 'asc' : 'desc',
+    orderMode: raw.orderMode === 'custom' ? 'custom' : 'score',
     headerText: raw.headerText,
     brandColor: raw.brandColor,
     reveal: raw.reveal ?? 'countdown',
+    titleStyle: raw.titleStyle,
+    backgroundColor: raw.backgroundColor,
+    videoHeightPct: raw.videoHeightPct,
+    captionsEnabled: raw.captionsEnabled,
   };
+}
+
+async function writeSettings(projectId: string, settings: RankingSettings) {
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { settingsJson: settings as unknown as Prisma.InputJsonValue, lastEditedAt: new Date() },
+  });
 }
 
 export async function createRankingProject(
@@ -81,7 +121,14 @@ export async function createRankingProject(
           title: input.title,
           type: 'RANKING',
           aspectRatio: input.aspectRatio ?? 'R9_16',
-          settingsJson: { candidates: [], order: input.order ?? 'desc' } as Prisma.InputJsonValue,
+          settingsJson: {
+            candidates: [],
+            order: input.order ?? 'desc',
+            orderMode: 'custom',
+            backgroundColor: '#2b2a2a',
+            videoHeightPct: 80,
+            captionsEnabled: false,
+          } as Prisma.InputJsonValue,
         },
       });
       await tx.track.createMany({
@@ -108,23 +155,65 @@ export async function createRankingProject(
 export async function getRanking(userId: string, projectId: string) {
   const p = await guard(userId, projectId);
   const settings = readSettings(p);
+  const ordered = orderCandidates(settings);
+
+  // Attach playable URLs + durations for candidates with a ready asset.
+  const assetIds = ordered.map((c) => c.assetId).filter((x): x is string => Boolean(x));
+  const assets = assetIds.length
+    ? await prisma.asset.findMany({
+        where: { id: { in: assetIds }, userId },
+        select: {
+          id: true,
+          status: true,
+          s3Bucket: true,
+          s3Key: true,
+          durationMs: true,
+          width: true,
+          height: true,
+          thumbnailKey: true,
+        },
+      })
+    : [];
+  const assetById = new Map(assets.map((a) => [a.id, a]));
+
   const enriched = await Promise.all(
-    settings.candidates.map(async (c) => ({
-      ...c,
-      thumbnailUrl: c.thumbnailKey
-        ? await presignGet({ bucket: 'public', key: c.thumbnailKey })
-        : null,
-    })),
+    ordered.map(async (c) => {
+      const asset = c.assetId ? assetById.get(c.assetId) : undefined;
+      let assetUrl: string | null = null;
+      if (asset && (asset.status === 'READY' || asset.status === 'UPLOADED') && asset.s3Key) {
+        assetUrl = await presignGet({
+          bucket: asset.s3Bucket as 'uploads' | 'generated' | 'exports' | 'public',
+          key: asset.s3Key,
+        });
+      }
+      const thumbKey = c.thumbnailKey ?? asset?.thumbnailKey ?? null;
+      return {
+        ...c,
+        trimStartMs: c.trimStartMs ?? null,
+        trimEndMs: c.trimEndMs ?? null,
+        volume: c.volume ?? 1,
+        assetStatus: asset?.status ?? null,
+        assetDurationMs: asset?.durationMs ?? null,
+        assetUrl,
+        thumbnailUrl: thumbKey ? await presignGet({ bucket: 'public', key: thumbKey }) : null,
+      };
+    }),
   );
+
   return {
     projectId: p.id,
     title: p.title,
     aspectRatio: p.aspectRatio,
     order: settings.order,
+    orderMode: settings.orderMode,
     headerText: settings.headerText ?? null,
     brandColor: settings.brandColor ?? null,
     reveal: settings.reveal ?? 'countdown',
-    candidates: sortCandidates(enriched, settings.order),
+    titleStyle: settings.titleStyle ?? null,
+    backgroundColor: settings.backgroundColor ?? '#2b2a2a',
+    videoHeightPct: settings.videoHeightPct ?? 80,
+    captionsEnabled: settings.captionsEnabled ?? false,
+    candidates: enriched,
   };
 }
 
@@ -143,13 +232,13 @@ export async function addCandidate(
     assetId: input.assetId ?? null,
     thumbnailKey: input.thumbnailKey ?? null,
     sourceUrl: input.sourceUrl ?? null,
+    trimStartMs: input.trimStartMs ?? null,
+    trimEndMs: input.trimEndMs ?? null,
+    volume: input.volume ?? 1,
     metadataJson: input.metadataJson ?? {},
   };
   settings.candidates = [...settings.candidates, next];
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { settingsJson: settings as unknown as Prisma.InputJsonValue, lastEditedAt: new Date() },
-  });
+  await writeSettings(projectId, settings);
   return next;
 }
 
@@ -164,10 +253,7 @@ export async function updateCandidate(
   const idx = settings.candidates.findIndex((c) => c.id === candidateId);
   if (idx === -1) throw Errors.notFound('Candidate');
   settings.candidates[idx] = { ...settings.candidates[idx]!, ...patch };
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { settingsJson: settings as unknown as Prisma.InputJsonValue, lastEditedAt: new Date() },
-  });
+  await writeSettings(projectId, settings);
   return settings.candidates[idx];
 }
 
@@ -175,10 +261,7 @@ export async function removeCandidate(userId: string, projectId: string, candida
   const p = await guard(userId, projectId);
   const settings = readSettings(p);
   settings.candidates = settings.candidates.filter((c) => c.id !== candidateId);
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { settingsJson: settings as unknown as Prisma.InputJsonValue, lastEditedAt: new Date() },
-  });
+  await writeSettings(projectId, settings);
 }
 
 export async function reorderCandidates(
@@ -200,10 +283,7 @@ export async function reorderCandidates(
   // Any missing ids get appended in their original order to avoid data loss.
   for (const c of byId.values()) ordered.push(c);
   settings.candidates = ordered;
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { settingsJson: settings as unknown as Prisma.InputJsonValue, lastEditedAt: new Date() },
-  });
+  await writeSettings(projectId, settings);
 }
 
 export async function updateRankingMeta(
@@ -211,27 +291,42 @@ export async function updateRankingMeta(
   projectId: string,
   patch: {
     order?: 'asc' | 'desc';
+    orderMode?: 'score' | 'custom';
     headerText?: string | null;
     brandColor?: string | null;
     reveal?: 'countdown' | 'topfirst';
+    titleStyle?: RankingTitleStyle | null;
+    backgroundColor?: string | null;
+    videoHeightPct?: number | null;
+    captionsEnabled?: boolean;
   },
 ) {
   const p = await guard(userId, projectId);
   const settings = readSettings(p);
   if (patch.order) settings.order = patch.order;
+  if (patch.orderMode) settings.orderMode = patch.orderMode;
   if (patch.headerText !== undefined) settings.headerText = patch.headerText ?? undefined;
   if (patch.brandColor !== undefined) settings.brandColor = patch.brandColor ?? undefined;
   if (patch.reveal) settings.reveal = patch.reveal;
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { settingsJson: settings as unknown as Prisma.InputJsonValue, lastEditedAt: new Date() },
-  });
+  if (patch.titleStyle !== undefined) settings.titleStyle = patch.titleStyle ?? undefined;
+  if (patch.backgroundColor !== undefined) {
+    settings.backgroundColor = patch.backgroundColor ?? undefined;
+  }
+  if (patch.videoHeightPct !== undefined) {
+    settings.videoHeightPct = patch.videoHeightPct ?? undefined;
+  }
+  if (patch.captionsEnabled !== undefined) settings.captionsEnabled = patch.captionsEnabled;
+  await writeSettings(projectId, settings);
 }
 
 /**
- * Bake a ranking into the timeline before export. Each candidate becomes an
- * OVERLAY text clip layered on top of the VIDEO track; if a candidate has
- * an assetId, that asset drops onto the VIDEO track for the same window.
+ * Bake a ranking into the timeline before export.
+ *
+ * Layout (design space, canvas = 100% x 100%):
+ *   - ranking title: always-on TEXT clip near the top (yPct 6).
+ *   - per slot: the candidate's asset letterboxed at videoHeightPct
+ *     (transformJson.scale), a big stylized rank number top-left, and the
+ *     candidate title just above the video block.
  *
  * The generated timeline replaces existing clips on the video / overlay
  * tracks so re-baking is idempotent.
@@ -239,13 +334,23 @@ export async function updateRankingMeta(
 export async function bakeTimeline(userId: string, projectId: string) {
   const p = await guard(userId, projectId);
   const settings = readSettings(p);
-  const sorted = sortCandidates(settings.candidates, settings.order);
+  const ordered = orderCandidates(settings);
   const reveal = settings.reveal ?? 'countdown';
-  const slotMs = 4200;
-  const introMs = 2500;
+  const revealed = reveal === 'topfirst' ? ordered : [...ordered].reverse();
+
+  const heightPct = clampPct(settings.videoHeightPct ?? 80);
+  const videoTopPct = (100 - heightPct) / 2;
+  const titleStyle = settings.titleStyle ?? {};
+  const brand = settings.brandColor ?? '#f97316';
+
+  // Pre-compute slot windows (variable when trims exist).
+  const slots = revealed.map((c) => ({
+    candidate: c,
+    durationMs: slotDuration(c),
+  }));
+  const totalMs = slots.reduce((sum, s) => sum + s.durationMs, 0);
 
   await prisma.$transaction(async (tx) => {
-    // Ensure a video + overlay + audio track exist.
     const existing = await tx.track.findMany({ where: { projectId } });
     async function ensureTrack(kind: 'VIDEO' | 'OVERLAY' | 'AUDIO' | 'CAPTION') {
       let t = existing.find((x) => x.kind === kind);
@@ -263,80 +368,121 @@ export async function bakeTimeline(userId: string, projectId: string) {
       where: { trackId: { in: [videoTrack.id, overlayTrack.id] } },
     });
 
-    let cursor = 0;
-    const revealed = reveal === 'topfirst' ? sorted : [...sorted].reverse();
-
-    // Intro title card.
-    if (settings.headerText) {
+    // Always-on ranking title.
+    if (settings.headerText && totalMs > 0) {
       await tx.clip.create({
         data: {
           trackId: overlayTrack.id,
           source: 'TEXT',
           startMs: 0,
-          durationMs: introMs,
+          durationMs: totalMs,
           inMs: 0,
-          outMs: introMs,
+          outMs: totalMs,
           textJson: {
             text: settings.headerText,
-            fontSize: 72,
-            fontWeight: 800,
-            color: '#ffffff',
-            background: settings.brandColor ?? '#111111',
+            fontFamily: titleStyle.fontFamily ?? 'Archivo Black',
+            fontSize: titleStyle.fontSize ?? 64,
+            fontWeight: titleStyle.bold === false ? 400 : 800,
+            color: titleStyle.color ?? '#ffffff',
+            background: titleStyle.background ?? null,
             align: 'center',
-            animation: 'pop',
+            animation: 'fade-in',
+            strokeColor: titleStyle.strokeColor ?? '#000000',
+            strokeWidth: titleStyle.strokeWidth ?? 0,
+            xPct: titleStyle.xPct ?? null,
+            yPct: titleStyle.yPct ?? 6,
           } as Prisma.InputJsonValue,
-          metadataJson: { role: 'ranking:intro' } as Prisma.InputJsonValue,
+          metadataJson: { role: 'ranking:header' } as Prisma.InputJsonValue,
         },
       });
-      cursor = introMs;
     }
 
-    for (let i = 0; i < revealed.length; i += 1) {
-      const c = revealed[i]!;
-      const rank = revealed.length - i; // 1-based rank when counting down
+    let cursor = 0;
+    for (let i = 0; i < slots.length; i += 1) {
+      const { candidate: c, durationMs } = slots[i]!;
+      // Rank counts down to #1 in countdown mode, up from #1 in topfirst.
+      const rank = reveal === 'topfirst' ? i + 1 : slots.length - i;
       const start = cursor;
 
-      // Underlying video/image for this candidate (if provided).
+      // Underlying video for this candidate (if attached and ready).
       if (c.assetId) {
         const asset = await tx.asset.findFirst({
           where: { id: c.assetId, userId },
           select: { id: true, durationMs: true },
         });
         if (asset) {
-          const dur = Math.min(asset.durationMs ?? slotMs, slotMs);
+          const inMs = Math.max(0, c.trimStartMs ?? 0);
           await tx.clip.create({
             data: {
               trackId: videoTrack.id,
               source: 'ASSET',
               assetId: asset.id,
               startMs: start,
-              durationMs: dur,
-              inMs: 0,
-              outMs: dur,
+              durationMs,
+              inMs,
+              outMs: inMs + durationMs,
+              volume: c.volume ?? 1,
+              transformJson: { scale: heightPct / 100 } as Prisma.InputJsonValue,
               metadataJson: { role: 'ranking:card', candidateId: c.id } as Prisma.InputJsonValue,
             },
           });
         }
       }
 
-      // Overlay text: rank + title + subtitle + score line.
-      const label = reveal === 'topfirst' ? `#${i + 1}` : `#${rank}`;
+      // Big stylized rank number, top-left.
       await tx.clip.create({
         data: {
           trackId: overlayTrack.id,
           source: 'TEXT',
           startMs: start,
-          durationMs: slotMs,
+          durationMs,
           inMs: 0,
-          outMs: slotMs,
+          outMs: durationMs,
           textJson: {
-            text: `${label}  •  ${c.title}${c.subtitle ? `\n${c.subtitle}` : ''}\n${formatScore(c.score)}`,
-            fontSize: 56,
+            text: `${rank}.`,
+            fontFamily: 'Archivo Black',
+            fontSize: 170,
             fontWeight: 800,
+            color: brand,
+            background: null,
+            align: 'left',
+            animation: 'pop',
+            strokeColor: '#000000',
+            strokeWidth: 10,
+            xPct: 16,
+            yPct: Math.max(4, videoTopPct * 0.55),
+          } as Prisma.InputJsonValue,
+          metadataJson: {
+            role: 'ranking:number',
+            candidateId: c.id,
+            rank,
+          } as Prisma.InputJsonValue,
+        },
+      });
+
+      // Candidate title just above the video block.
+      const titleText = c.subtitle ? `${c.title}\n${c.subtitle}` : c.title;
+      await tx.clip.create({
+        data: {
+          trackId: overlayTrack.id,
+          source: 'TEXT',
+          startMs: start,
+          durationMs,
+          inMs: 0,
+          outMs: durationMs,
+          textJson: {
+            text: titleText,
+            fontFamily: 'Rubik',
+            fontSize: 44,
+            fontWeight: 500,
             color: '#ffffff',
-            background: settings.brandColor ?? 'rgba(0,0,0,0.65)',
+            background: null,
             align: 'center',
             animation: 'fade-in',
+            strokeColor: '#000000',
+            strokeWidth: 0,
+            xPct: null,
+            yPct: Math.max(8, videoTopPct - 4),
           } as Prisma.InputJsonValue,
           metadataJson: {
             role: 'ranking:overlay',
@@ -345,7 +491,7 @@ export async function bakeTimeline(userId: string, projectId: string) {
           } as Prisma.InputJsonValue,
         },
       });
-      cursor += slotMs;
+      cursor += durationMs;
     }
 
     // Recompute cached project duration.
@@ -355,17 +501,30 @@ export async function bakeTimeline(userId: string, projectId: string) {
     });
   });
 
-  return { durationMs: 0 };
+  return { durationMs: totalMs };
 }
 
-function sortCandidates<T extends { score: number }>(items: T[], order: 'asc' | 'desc'): T[] {
-  const copy = [...items];
-  copy.sort((a, b) => (order === 'asc' ? a.score - b.score : b.score - a.score));
+/** Stored order when custom; score sort otherwise. */
+function orderCandidates<T extends { score: number }>(settings: {
+  candidates: T[];
+  order: 'asc' | 'desc';
+  orderMode: 'score' | 'custom';
+}): T[] {
+  if (settings.orderMode === 'custom') return [...settings.candidates];
+  const copy = [...settings.candidates];
+  copy.sort((a, b) => (settings.order === 'asc' ? a.score - b.score : b.score - a.score));
   return copy;
 }
 
-function formatScore(score: number): string {
-  if (Math.abs(score) >= 1_000_000) return `${(score / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(score) >= 1_000) return `${(score / 1_000).toFixed(1)}K`;
-  return `${score}`;
+function slotDuration(c: RankingCandidate): number {
+  const start = c.trimStartMs ?? 0;
+  const end = c.trimEndMs;
+  if (end != null && end > start) {
+    return Math.min(MAX_SLOT_MS, Math.max(MIN_SLOT_MS, end - start));
+  }
+  return DEFAULT_SLOT_MS;
+}
+
+function clampPct(v: number): number {
+  return Math.min(100, Math.max(10, v));
 }

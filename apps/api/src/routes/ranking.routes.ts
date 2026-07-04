@@ -14,16 +14,37 @@ const candidateSchema = z.object({
   assetId: z.string().nullable().optional(),
   thumbnailKey: z.string().nullable().optional(),
   sourceUrl: z.string().url().nullable().optional(),
+  trimStartMs: z.number().int().nonnegative().nullable().optional(),
+  trimEndMs: z.number().int().positive().nullable().optional(),
+  volume: z.number().min(0).max(2).optional(),
   metadataJson: z.record(z.unknown()).optional(),
 });
 
 const updateCandidateSchema = candidateSchema.partial();
 
+const titleStyleSchema = z.object({
+  fontFamily: z.string().max(64).optional(),
+  fontSize: z.number().min(8).max(240).optional(),
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
+  color: z.string().max(32).optional(),
+  background: z.string().max(64).nullable().optional(),
+  strokeColor: z.string().max(32).optional(),
+  strokeWidth: z.number().min(0).max(40).optional(),
+  xPct: z.number().min(0).max(100).nullable().optional(),
+  yPct: z.number().min(0).max(100).nullable().optional(),
+});
+
 const metaSchema = z.object({
   order: z.enum(['asc', 'desc']).optional(),
+  orderMode: z.enum(['score', 'custom']).optional(),
   headerText: z.string().max(200).nullable().optional(),
   brandColor: z.string().max(32).nullable().optional(),
   reveal: z.enum(['countdown', 'topfirst']).optional(),
+  titleStyle: titleStyleSchema.nullable().optional(),
+  backgroundColor: z.string().max(32).nullable().optional(),
+  videoHeightPct: z.number().min(10).max(100).nullable().optional(),
+  captionsEnabled: z.boolean().optional(),
 });
 
 const reorderSchema = z.object({ orderedIds: z.array(z.string()).min(1).max(200) });
