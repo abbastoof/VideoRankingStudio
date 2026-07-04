@@ -7,7 +7,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from .. import api_client
 from ..celery_app import celery_app
+from ..logging import logger
 from ..storage import download_tempfile, upload_file
 from ._base import job_lifecycle, succeed
 
@@ -22,6 +24,7 @@ def generate_thumbnail(
     output_key: str,
     at_seconds: float = 1.0,
     width: int = 720,
+    asset_id: str | None = None,
 ) -> dict[str, Any]:
     with job_lifecycle(job_id, "thumbnail") as report:
         with download_tempfile(asset_bucket, asset_key, suffix=Path(asset_key).suffix) as src:  # type: ignore[arg-type]
@@ -41,6 +44,13 @@ def generate_thumbnail(
             report(0.8, "uploading")
             upload_file("public", output_key, dest, content_type="image/jpeg")
             dest.unlink(missing_ok=True)
+
+        if asset_id:
+            # Best-effort: the poster is useful even if recording it fails.
+            try:
+                api_client.asset_thumbnail(asset_id, key=output_key)
+            except Exception as exc:
+                logger.warning("thumbnail.record_failed", asset_id=asset_id, error=str(exc))
 
         out = {"bucket": "public", "key": output_key}
         succeed(job_id, out)

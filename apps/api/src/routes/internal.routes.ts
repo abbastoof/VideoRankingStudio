@@ -7,6 +7,7 @@ import { prisma } from '../config/db';
 import { Errors } from '../lib/errors';
 import { requireInternal } from '../middleware/auth';
 import * as projectsRepo from '../repositories/projects.repo';
+import { enqueue } from '../services/jobs.service';
 
 /**
  * Internal routes are called only by the worker pool (or future cron jobs).
@@ -171,7 +172,39 @@ export async function internalRoutes(app: FastifyInstance): Promise<void> {
           fps: body.fps ?? null,
         },
       });
+
+      // Imported videos get the same poster-frame treatment as uploads.
+      if (asset.kind === 'VIDEO' && !asset.thumbnailKey) {
+        await enqueue({
+          userId: asset.userId,
+          kind: 'THUMBNAIL_GENERATE',
+          taskName: 'vrs.thumbnail.generate',
+          payload: {
+            asset_bucket: body.s3Bucket,
+            asset_key: body.s3Key,
+            output_key: `thumbnails/${asset.id}.jpg`,
+            at_seconds: 1.0,
+            asset_id: asset.id,
+          },
+        });
+      }
+
       return { ok: true, assetId: asset.id };
+    },
+  });
+
+  // Poster frame produced by the thumbnail worker.
+  app.post('/internal/assets/:id/thumbnail', {
+    schema: {
+      tags: ['internal'],
+      params: z.object({ id: z.string() }),
+      body: z.object({ key: z.string().min(1) }),
+    },
+    handler: async (req) => {
+      const { id } = z.object({ id: z.string() }).parse(req.params);
+      const { key } = z.object({ key: z.string().min(1) }).parse(req.body);
+      await prisma.asset.update({ where: { id }, data: { thumbnailKey: key } });
+      return { ok: true };
     },
   });
 

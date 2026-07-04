@@ -32,6 +32,7 @@ export async function completeUpload(userId: string, assetId: string) {
         asset_key: updated.s3Key,
         output_key: `thumbnails/${updated.id}.jpg`,
         at_seconds: 1.0,
+        asset_id: updated.id,
       },
     });
   }
@@ -39,7 +40,44 @@ export async function completeUpload(userId: string, assetId: string) {
   return serializeAsset(updated);
 }
 
+/**
+ * Hosts we let yt-dlp fetch from. The worker will download whatever URL we
+ * hand it, so an open URL field is an SSRF vector (internal IPs, metadata
+ * endpoints) and a free-tier abuse vector (arbitrary large downloads).
+ */
+const IMPORT_HOST_ALLOWLIST = [
+  'youtube.com',
+  'youtu.be',
+  'tiktok.com',
+  'instagram.com',
+  'instagr.am',
+];
+
+function assertImportableUrl(raw: string): void {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw Errors.unprocessable('That does not look like a valid URL');
+  }
+  if (url.protocol !== 'https:') {
+    throw Errors.unprocessable('Only https:// links can be imported');
+  }
+  const host = url.hostname.toLowerCase();
+  const allowed = IMPORT_HOST_ALLOWLIST.some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  );
+  if (!allowed) {
+    throw Errors.unprocessable(
+      'Only YouTube, TikTok, and Instagram links are supported',
+      { supported: IMPORT_HOST_ALLOWLIST },
+    );
+  }
+}
+
 export async function importFromUrl(userId: string, body: ImportUrl) {
+  assertImportableUrl(body.url);
+
   const asset = await prisma.asset.create({
     data: {
       userId,

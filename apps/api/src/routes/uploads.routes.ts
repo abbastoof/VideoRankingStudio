@@ -94,6 +94,9 @@ export async function uploadsRoutes(app: FastifyInstance): Promise<void> {
       body: importUrlSchema,
       response: { 202: z.object({ assetId: z.string(), jobId: z.string() }) },
     },
+    // Each accepted import queues a full yt-dlp download on the worker pool;
+    // keep the per-user request rate modest.
+    config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
     handler: async (req, reply) => {
       const body = importUrlSchema.parse(req.body);
       const userId = req.auth!.sub;

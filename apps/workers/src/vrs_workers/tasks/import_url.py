@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from .. import api_client
 from ..celery_app import celery_app
 from ..config import settings
 from ..storage import upload_file
@@ -63,13 +64,31 @@ def import_from_url(
             content_type = _content_type_for(media.suffix)
             upload_file("uploads", key, media, content_type=content_type)
 
+            size_bytes = media.stat().st_size
+            duration_ms = int((info.get("duration") or 0) * 1000)
+
+            report(0.9, "registering asset")
+            # Finalize the Asset row — without this it stays PROCESSING with
+            # an empty s3Key and can never be used downstream.
+            api_client.asset_done(
+                asset_id,
+                s3_bucket="uploads",
+                s3_key=key,
+                mime_type=content_type,
+                size_bytes=size_bytes,
+                duration_ms=duration_ms or None,
+                width=info.get("width"),
+                height=info.get("height"),
+                fps=info.get("fps"),
+            )
+
             result = {
                 "assetId": asset_id,
                 "s3Bucket": "uploads",
                 "s3Key": key,
                 "mimeType": content_type,
-                "sizeBytes": media.stat().st_size,
-                "durationMs": int((info.get("duration") or 0) * 1000),
+                "sizeBytes": size_bytes,
+                "durationMs": duration_ms,
                 "width": info.get("width"),
                 "height": info.get("height"),
                 "fps": info.get("fps"),
