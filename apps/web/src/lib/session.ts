@@ -1,8 +1,9 @@
 import 'server-only';
 
+import { SdkError } from '@vrs/sdk';
 import type { AuthSession } from '@vrs/types';
 
-import { api, ApiError } from './api';
+import { serverClient } from './sdk';
 
 /**
  * Read the current authenticated session by calling the API with the
@@ -11,9 +12,9 @@ import { api, ApiError } from './api';
  */
 export async function getSession(): Promise<AuthSession | null> {
   try {
-    return await api.get<AuthSession>('/v1/auth/session', { noStore: true });
+    return await serverClient().session();
   } catch (err) {
-    if (err instanceof ApiError && (err.status === 401 || err.status === 410)) {
+    if (err instanceof SdkError && (err.status === 401 || err.status === 410)) {
       return null;
     }
     throw err;
