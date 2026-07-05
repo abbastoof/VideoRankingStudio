@@ -2,7 +2,10 @@
 
 Status legend: ✅ done · 🟡 in progress · ⬜ not started · 🔒 blocked
 
-> **Current state:** All planned roadmap phases complete. Multi-track editor, ranking workflow, external analytics, CDN+DNS Terraform, Grafana dashboards, Sentry+OTel, moderation, authenticated E2E, deploy workflow, and i18n scaffolding all landed.
+> **Current state:** All planned roadmap phases complete, plus the Viblo-parity
+> pass (Session 8): the ranking flow is now a single-page builder with a live
+> phone preview, link import, upload, trim, per-video style tabs, and an
+> export pipeline that actually renders text overlays.
 
 ## Roadmap
 
@@ -38,6 +41,51 @@ Status legend: ✅ done · 🟡 in progress · ⬜ not started · 🔒 blocked
   helper with `{var}` interpolation and locale fallback.
 
 ## Per-session log
+
+### Session 8 — Viblo-parity ranking builder, text rendering in exports, UI kit
+
+**Landed (each its own commit, b24f5fc..2461b00):**
+
+- **fix(web)**: server components never forwarded cookies (`getSession()`
+  used the browser fetcher from RSC); `serverClient()` now also forces
+  `cache: 'no-store'` on authenticated reads.
+- **feat(ui)**: Switch, Slider, Select, ColorPicker, Tabs, Collapsible,
+  Dropzone primitives; ToastProvider/useToast queue.
+- **fix(workers,api)**: URL imports finalize their Asset (was stuck
+  PROCESSING forever), posters recorded via new
+  `/internal/assets/:id/thumbnail`, https-allowlist + rate cap on imports.
+- **feat(workers)**: TEXT clips render in exports via a Pillow rasterizer
+  (fonts, stroke, background pill, synthetic italic, xPct/yPct), canvas
+  background color honored, `transformJson` height scaling, fonts baked
+  into the workers image.
+- **feat(web)**: self-hosted Archivo Black + Rubik with a shared title-font
+  registry.
+- **feat(api,sdk)**: ranking model v2 — titleStyle, backgroundColor,
+  videoHeightPct, captionsEnabled, orderMode, per-candidate trim/volume,
+  typed RankingDetail; settings mutations serialized behind
+  `SELECT … FOR UPDATE`; bake batches clip inserts.
+- **feat(rankings)**: Viblo-style single-page builder — live 1080-design
+  phone preview matching the rasterizer 1:1, per-candidate link import
+  (spinner + auto title) and drag-drop upload, trim ruler + volume,
+  playback-order card, Save as Draft / Generate footer, /rankings index,
+  per-candidate Video Title + Number Appearance tabs.
+- **fix(rankings)**: 10 confirmed findings from a 49-agent adversarial
+  review (flush write barrier, order re-sort, refresh clobber, preview
+  volume/double-advance, pill geometry parity, honest trim chips,
+  presigned-URL recovery, italic end-to-end).
+- **feat(web)**: route skeletons, editor hygiene (undo/redo wired, title
+  bound, aspect-aware export, OVERLAY text visible in the editor preview).
+
+**Next up (needs worker-side support):**
+1. Per-candidate Voiceover tab (SDK `listVoices`, TTS clip placement on
+   the AUDIO track per slot).
+2. Size & Position tab + Drag Title/Drag Video toggles (compose overlay
+   x/y from `transformJson`).
+3. Animation & Transition tab (xfade between slots; text entrance
+   animations in compose).
+4. Sound Effect tab + SFX/music library (compose bg-music path already
+   exists but is disabled).
+5. Rich-toolbar extras (align, emoji), All Tools nav restructure.
 
 ### Session 7 — Multi-track, rankings, external stats, CDN, dashboards, tracing, moderation, deploy, i18n
 
