@@ -3,7 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 
-import { ConfirmProvider } from '@vrs/ui';
+import { ConfirmProvider, ToastProvider } from '@vrs/ui';
 
 export function QueryProvider({ children }: { children: ReactNode }) {
   const [client] = useState(
@@ -26,7 +26,9 @@ export function QueryProvider({ children }: { children: ReactNode }) {
   );
   return (
     <QueryClientProvider client={client}>
-      <ConfirmProvider>{children}</ConfirmProvider>
+      <ToastProvider>
+        <ConfirmProvider>{children}</ConfirmProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

@@ -13,6 +13,7 @@ export {
 export { Spinner, type SpinnerProps } from './components/Spinner';
 export { Badge, type BadgeProps } from './components/Badge';
 export { Toast, type ToastProps, type ToastTone } from './components/Toast';
+export { ToastProvider, useToast, type ToastOptions } from './components/Toaster';
 export {
   Dialog,
   ConfirmProvider,

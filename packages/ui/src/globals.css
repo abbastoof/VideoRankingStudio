@@ -45,6 +45,13 @@
     background-size: 200% 100%;
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton {
+      animation: none;
+      background: rgb(var(--color-muted));
+    }
+  }
+
   /* Styled native range input used by the Slider component. The track fill
      is painted inline (linear-gradient on the element background). */
   .vrs-slider {

@@ -28,7 +28,21 @@ export interface EditorClip {
   volume: number;
   opacity: number;
   isHighlight: boolean;
-  text?: { value: string; color?: string; background?: string; size?: number };
+  text?: {
+    value: string;
+    color?: string;
+    background?: string | null;
+    size?: number;
+    fontFamily?: string;
+    fontWeight?: number;
+    italic?: boolean;
+    align?: 'left' | 'center' | 'right';
+    /** Block-center position as % of canvas (design space). */
+    xPct?: number | null;
+    yPct?: number | null;
+    strokeColor?: string;
+    strokeWidth?: number;
+  };
   thumbnailUrl?: string | null;
   previewUrl?: string | null;
 }

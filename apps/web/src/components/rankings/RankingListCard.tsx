@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 
 import type { ProjectSummary } from '@vrs/types';
-import { Badge, Card, CardContent, cn, useConfirm } from '@vrs/ui';
+import { Badge, Card, CardContent, cn, useConfirm, useToast } from '@vrs/ui';
 
 import { clientSdk } from '@/lib/client-sdk';
 
@@ -14,6 +14,7 @@ import { clientSdk } from '@/lib/client-sdk';
 export function RankingListCard({ project }: { project: ProjectSummary }) {
   const router = useRouter();
   const confirm = useConfirm();
+  const toast = useToast();
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -39,7 +40,10 @@ export function RankingListCard({ project }: { project: ProjectSummary }) {
     setBusy(true);
     try {
       await clientSdk().duplicateProject(project.id);
+      toast({ tone: 'success', title: 'Ranking duplicated' });
       router.refresh();
+    } catch {
+      toast({ tone: 'danger', title: 'Could not duplicate the ranking' });
     } finally {
       setBusy(false);
     }
@@ -57,7 +61,10 @@ export function RankingListCard({ project }: { project: ProjectSummary }) {
     setBusy(true);
     try {
       await clientSdk().deleteProject(project.id);
+      toast({ tone: 'success', title: 'Ranking deleted' });
       router.refresh();
+    } catch {
+      toast({ tone: 'danger', title: 'Could not delete the ranking' });
     } finally {
       setBusy(false);
     }

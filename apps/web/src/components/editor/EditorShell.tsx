@@ -66,10 +66,11 @@ export function EditorShell({ projectId, initialState }: EditorShellProps) {
       const target = e.target as HTMLElement | null;
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
       const cmd = e.metaKey || e.ctrlKey;
-      if (cmd && !e.shiftKey && e.key === 'z') {
+      const key = e.key.toLowerCase();
+      if (cmd && key === 'z' && !e.shiftKey) {
         e.preventDefault();
         undo();
-      } else if (cmd && (e.key === 'y' || (e.shiftKey && e.key === 'z' || e.key === 'Z'))) {
+      } else if (cmd && (key === 'y' || (key === 'z' && e.shiftKey))) {
         e.preventDefault();
         redo();
       }
@@ -86,10 +87,18 @@ export function EditorShell({ projectId, initialState }: EditorShellProps) {
 
   async function exportVideo() {
     const sdk = clientSdk();
+    // Export at the project's own aspect ratio — a landscape project must
+    // not render into a hardcoded 1080x1920 portrait frame.
+    const dims = {
+      R9_16: { w: 1080, h: 1920 },
+      R1_1: { w: 1080, h: 1080 },
+      R4_5: { w: 1080, h: 1350 },
+      R16_9: { w: 1920, h: 1080 },
+    }[useEditorStore.getState().aspectRatio] ?? { w: 1080, h: 1920 };
     const out = await sdk.requestExport(projectId, {
       format: 'MP4_H264',
-      resolutionW: 1080,
-      resolutionH: 1920,
+      resolutionW: dims.w,
+      resolutionH: dims.h,
       fps: 30,
       burnCaptions: true,
       normalizeLoudness: true,

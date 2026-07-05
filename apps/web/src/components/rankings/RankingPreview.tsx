@@ -7,6 +7,7 @@ import type { RankingDetail } from '@vrs/sdk';
 import { cn } from '@vrs/ui';
 
 import { fontCssFor } from '@/lib/fonts';
+import { strokeShadow } from '@/lib/text-style';
 
 import { computeLayout, DEFAULT_TITLE_STYLE, slotDurationMs } from './ranking-layout';
 
@@ -376,17 +377,6 @@ function ControlButton({
       {children}
     </button>
   );
-}
-
-/** 8-direction text shadow approximating the export's outer stroke. */
-function strokeShadow(width: number, color: string): string {
-  const w = Math.max(1, Math.round(width * 0.6));
-  const dirs = [
-    [-1, -1], [0, -1], [1, -1],
-    [-1, 0], [1, 0],
-    [-1, 1], [0, 1], [1, 1],
-  ];
-  return dirs.map(([x, y]) => `${x! * w}px ${y! * w}px 0 ${color}`).join(', ');
 }
 
 function designSize(aspect: string): { w: number; h: number } {

@@ -7,6 +7,7 @@ import type {
   RankingDetail,
   RankingMetaPatch,
 } from '@vrs/sdk';
+import { useToast } from '@vrs/ui';
 
 import { clientSdk } from '@/lib/client-sdk';
 
@@ -30,6 +31,7 @@ export interface ImportState {
  * everything the UI shows before they bake.
  */
 export function useRankingBuilder(initial: RankingDetail) {
+  const toast = useToast();
   const [ranking, setRanking] = useState<RankingDetail>(initial);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [imports, setImports] = useState<Record<string, ImportState>>({});
@@ -269,6 +271,11 @@ export function useRankingBuilder(initial: RankingDetail) {
         );
         await refresh();
         setImports((m) => ({ ...m, [candidateId]: { status: 'idle' } }));
+        toast({
+          tone: 'success',
+          title: 'Video imported',
+          description: resultTitle ? `"${resultTitle.slice(0, 80)}"` : undefined,
+        });
       } catch (err) {
         setImports((m) => ({
           ...m,
@@ -279,7 +286,7 @@ export function useRankingBuilder(initial: RankingDetail) {
         }));
       }
     },
-    [initial.projectId, refresh, track],
+    [initial.projectId, refresh, toast, track],
   );
 
   /** Upload a local file into a candidate via the presigned flow. */
@@ -309,6 +316,7 @@ export function useRankingBuilder(initial: RankingDetail) {
         );
         await refresh();
         setImports((m) => ({ ...m, [candidateId]: { status: 'idle' } }));
+        toast({ tone: 'success', title: 'Video uploaded', description: file.name });
       } catch (err) {
         setImports((m) => ({
           ...m,
@@ -319,7 +327,7 @@ export function useRankingBuilder(initial: RankingDetail) {
         }));
       }
     },
-    [initial.projectId, refresh, track],
+    [initial.projectId, refresh, toast, track],
   );
 
   return {

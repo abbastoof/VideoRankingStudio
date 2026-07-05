@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useRef, useState } from 'react';
 
 import type { RankingDetail } from '@vrs/sdk';
-import { Button, cn, Spinner } from '@vrs/ui';
+import { Button, cn, Spinner, useToast } from '@vrs/ui';
 
 import { clientSdk } from '@/lib/client-sdk';
 
@@ -23,6 +23,7 @@ import { useRankingBuilder } from './useRankingBuilder';
  */
 export function RankingBuilder({ initial }: { initial: RankingDetail }) {
   const router = useRouter();
+  const toast = useToast();
   const builder = useRankingBuilder(initial);
   const { ranking, saveState, imports } = builder;
   const [generating, setGenerating] = useState(false);
@@ -54,7 +55,8 @@ export function RankingBuilder({ initial }: { initial: RankingDetail }) {
   async function saveDraft() {
     try {
       await builder.flush();
-      router.push('/dashboard');
+      toast({ tone: 'success', title: 'Draft saved' });
+      router.push('/rankings');
     } catch {
       // saveState already shows the error state; stay on the page.
     }

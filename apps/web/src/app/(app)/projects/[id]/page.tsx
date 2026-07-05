@@ -66,6 +66,20 @@ async function loadTimeline(
           volume: number;
           opacity: number;
           isHighlight: boolean;
+          text?: {
+            text?: string;
+            color?: string;
+            background?: string | null;
+            fontSize?: number;
+            fontFamily?: string;
+            fontWeight?: number;
+            italic?: boolean;
+            align?: 'left' | 'center' | 'right';
+            xPct?: number | null;
+            yPct?: number | null;
+            strokeColor?: string;
+            strokeWidth?: number;
+          };
           previewUrl: string | null;
           thumbnailUrl: string | null;
         }>;
@@ -96,6 +110,23 @@ async function loadTimeline(
           volume: c.volume,
           opacity: c.opacity,
           isHighlight: c.isHighlight,
+          // API textJson → editor shape (`text` string becomes `value`).
+          text: c.text?.text
+            ? {
+                value: c.text.text,
+                color: c.text.color,
+                background: c.text.background ?? null,
+                size: c.text.fontSize,
+                fontFamily: c.text.fontFamily,
+                fontWeight: c.text.fontWeight,
+                italic: c.text.italic,
+                align: c.text.align,
+                xPct: c.text.xPct ?? null,
+                yPct: c.text.yPct ?? null,
+                strokeColor: c.text.strokeColor,
+                strokeWidth: c.text.strokeWidth,
+              }
+            : undefined,
           previewUrl: c.previewUrl,
           thumbnailUrl: c.thumbnailUrl,
         })),

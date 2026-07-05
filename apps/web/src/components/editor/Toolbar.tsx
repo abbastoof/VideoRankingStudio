@@ -16,9 +16,14 @@ export function Toolbar({
   onExport: () => Promise<void> | void;
 }) {
   const title = useEditorStore((s) => s.title);
+  const setTitle = useEditorStore((s) => s.setTitle);
   const dirty = useEditorStore((s) => s.dirty);
   const zoomIn = useEditorStore((s) => s.zoomIn);
   const zoomOut = useEditorStore((s) => s.zoomOut);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
+  const canUndo = useEditorStore((s) => s.history.past.length > 0);
+  const canRedo = useEditorStore((s) => s.history.future.length > 0);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -50,7 +55,8 @@ export function Toolbar({
         <ChevronLeft className="h-4 w-4" />
       </Link>
       <Input
-        defaultValue={title}
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
         className="max-w-xs"
         aria-label="Project title"
       />
@@ -59,8 +65,8 @@ export function Toolbar({
       <div className="flex-1" />
 
       <div className="hidden md:flex items-center gap-1 border-r border-border pr-3 mr-1">
-        <Button variant="ghost" size="icon" aria-label="Undo"><Undo className="h-4 w-4" /></Button>
-        <Button variant="ghost" size="icon" aria-label="Redo"><Redo className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={undo} disabled={!canUndo} aria-label="Undo"><Undo className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" onClick={redo} disabled={!canRedo} aria-label="Redo"><Redo className="h-4 w-4" /></Button>
         <Button variant="ghost" size="icon" onClick={zoomOut} aria-label="Zoom out"><ZoomOut className="h-4 w-4" /></Button>
         <Button variant="ghost" size="icon" onClick={zoomIn} aria-label="Zoom in"><ZoomIn className="h-4 w-4" /></Button>
       </div>

@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import { cn } from '@vrs/ui';
 
+import { fontCssFor } from '@/lib/fonts';
+import { strokeShadow } from '@/lib/text-style';
 import { selectTimelineDurationMs, useEditorStore } from '@/state/editor-store';
 
 /**
@@ -105,6 +107,8 @@ export function Preview() {
         ) : (
           <PreviewEmpty />
         )}
+        {/* Text overlays from OVERLAY tracks (baked rankings, titles). */}
+        <OverlayLayer />
         {/* Active caption overlay (MVP: render the most recent caption block) */}
         <CaptionOverlay />
       </div>
@@ -138,6 +142,91 @@ function PreviewEmpty() {
     <div className="text-center text-muted-foreground space-y-2 p-6">
       <p className="text-sm">Nothing on the timeline yet.</p>
       <p className="text-xs opacity-80">Add a clip from the sidebar to see a preview.</p>
+    </div>
+  );
+}
+
+/**
+ * Renders TEXT clips on OVERLAY tracks at the playhead. Positions and font
+ * sizes are design-space (1080-wide portrait / 1920-wide landscape canvas),
+ * scaled to the rendered box via a ResizeObserver — the same approach as the
+ * ranking builder's phone preview, so baked rankings look right here too.
+ */
+function OverlayLayer() {
+  const playheadMs = useEditorStore((s) => s.playheadMs);
+  const aspectRatio = useEditorStore((s) => s.aspectRatio);
+  const overlayTracks = useEditorStore((s) => s.tracks.filter((t) => t.kind === 'OVERLAY'));
+
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [boxWidth, setBoxWidth] = useState(0);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w) setBoxWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const designWidth = aspectRatio === 'R16_9' ? 1920 : 1080;
+  const scale = boxWidth > 0 ? boxWidth / designWidth : 0;
+
+  const active = overlayTracks
+    .flatMap((t) => t.clips)
+    .filter(
+      (c) =>
+        c.text?.value && playheadMs >= c.startMs && playheadMs < c.startMs + c.durationMs,
+    );
+
+  return (
+    <div ref={boxRef} className="pointer-events-none absolute inset-0 overflow-hidden">
+      {scale > 0
+        ? active.map((clip) => {
+            const t = clip.text!;
+            const size = (t.size ?? 48) * scale;
+            const stroke = t.strokeWidth ?? 0;
+            return (
+              <div
+                key={clip.id}
+                className="absolute w-full select-none text-center leading-[1.25]"
+                style={{
+                  top: `${t.yPct ?? 50}%`,
+                  transform: 'translateY(-50%)',
+                  paddingLeft: t.xPct == null ? '5%' : 0,
+                  paddingRight: t.xPct == null ? '5%' : 0,
+                  ...(t.xPct != null
+                    ? { left: `${t.xPct}%`, width: 'auto', transform: 'translate(-50%, -50%)' }
+                    : {}),
+                  textAlign: t.align ?? 'center',
+                  fontFamily: fontCssFor(t.fontFamily ?? 'Inter'),
+                  fontSize: size,
+                  fontWeight: t.fontWeight ?? 700,
+                  fontStyle: t.italic ? 'italic' : undefined,
+                  color: t.color ?? '#ffffff',
+                  textShadow: stroke > 0 ? strokeShadow(stroke * scale, t.strokeColor ?? '#000') : undefined,
+                }}
+              >
+                <span
+                  style={{
+                    whiteSpace: 'pre-line',
+                    ...(t.background
+                      ? {
+                          display: 'inline-block',
+                          backgroundColor: t.background,
+                          borderRadius: '0.25em',
+                          padding: '0.35em',
+                        }
+                      : {}),
+                  }}
+                >
+                  {t.value}
+                </span>
+              </div>
+            );
+          })
+        : null}
     </div>
   );
 }
