@@ -35,6 +35,8 @@ export const clipTextSchema = z.object({
   fontFamily: z.string().default('Inter'),
   fontSize: z.number().positive().default(48),
   fontWeight: z.number().int().min(100).max(900).default(700),
+  /** Synthetic oblique — none of the bundled display fonts ship italics. */
+  italic: z.boolean().default(false),
   color: z.string().default('#ffffff'),
   background: z.string().nullable().default(null),
   align: z.enum(['left', 'center', 'right']).default('center'),

@@ -38,16 +38,27 @@ export function computeLayout(ranking: Pick<RankingDetail, 'videoHeightPct'>): R
   };
 }
 
-/** Duration of one candidate's slot in the final video, mirroring the bake. */
+/** Longest slot a single candidate can occupy (rankings are shorts). */
+export const MAX_SLOT_MS = 60_000;
+/** Slot length for candidates with no attached video yet. */
+export const DEFAULT_SLOT_MS = 4_200;
+
+/**
+ * Duration of one candidate's slot in the final video, mirroring the bake:
+ * the trimmed range when set, else the full clip, else the default card
+ * length. TrimBar shows the same effective end, so the chips never lie.
+ */
 export function slotDurationMs(c: {
   trimStartMs: number | null;
   trimEndMs: number | null;
+  assetDurationMs?: number | null;
 }): number {
   const start = c.trimStartMs ?? 0;
-  if (c.trimEndMs != null && c.trimEndMs > start) {
-    return Math.min(60_000, Math.max(1_000, c.trimEndMs - start));
+  const end = c.trimEndMs ?? c.assetDurationMs ?? null;
+  if (end != null && end > start) {
+    return Math.min(MAX_SLOT_MS, Math.max(1_000, end - start));
   }
-  return 4_200;
+  return DEFAULT_SLOT_MS;
 }
 
 export const FONT_SIZE_OPTIONS = [20, 24, 28, 32, 36, 44, 52, 64, 80, 96];

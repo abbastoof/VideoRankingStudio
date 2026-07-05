@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { cn, Slider } from '@vrs/ui';
 
+import { MAX_SLOT_MS } from './ranking-layout';
+
 export interface TrimBarProps {
   /** Full source duration in ms. */
   durationMs: number;
@@ -31,16 +33,27 @@ export function TrimBar({
   onVolumeChange,
 }: TrimBarProps) {
   const total = Math.max(durationMs, MIN_SPAN_MS);
+  // Untrimmed default matches the effective slot the bake will produce:
+  // the whole clip, capped at the per-slot maximum.
+  const defaultEnd = Math.min(total, MAX_SLOT_MS);
   const [start, setStart] = useState(trimStartMs ?? 0);
-  const [end, setEnd] = useState(trimEndMs ?? total);
+  const [end, setEnd] = useState(trimEndMs ?? defaultEnd);
   const railRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<'start' | 'end' | null>(null);
 
   // Volume edits locally while dragging; the PATCH fires debounced so a
-  // slider drag doesn't stampede the API.
+  // slider drag doesn't stampede the API. Release/blur commits immediately
+  // so a Generate right after can't miss it.
   const [vol, setVol] = useState(volume);
   const volTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => setVol(volume), [volume]);
+  // latest = what the user last dragged to; committed = what the parent has.
+  const latestVol = useRef(volume);
+  const committedVol = useRef(volume);
+  useEffect(() => {
+    setVol(volume);
+    latestVol.current = volume;
+    committedVol.current = volume;
+  }, [volume]);
   useEffect(
     () => () => {
       if (volTimer.current) clearTimeout(volTimer.current);
@@ -49,16 +62,27 @@ export function TrimBar({
   );
   function changeVolume(v: number) {
     setVol(v);
+    latestVol.current = v;
     if (volTimer.current) clearTimeout(volTimer.current);
-    volTimer.current = setTimeout(() => onVolumeChange(v), 400);
+    volTimer.current = setTimeout(commitVolume, 400);
+  }
+  function commitVolume() {
+    if (volTimer.current) {
+      clearTimeout(volTimer.current);
+      volTimer.current = null;
+    }
+    if (latestVol.current !== committedVol.current) {
+      committedVol.current = latestVol.current;
+      onVolumeChange(latestVol.current);
+    }
   }
 
   // Re-sync when the server state changes underneath (e.g. refresh).
   useEffect(() => {
     if (dragging.current) return;
     setStart(trimStartMs ?? 0);
-    setEnd(trimEndMs ?? total);
-  }, [trimStartMs, trimEndMs, total]);
+    setEnd(trimEndMs ?? defaultEnd);
+  }, [trimStartMs, trimEndMs, defaultEnd]);
 
   const msAtPointer = useCallback(
     (clientX: number): number => {
@@ -147,6 +171,8 @@ export function TrimBar({
             step={0.05}
             value={vol}
             onValueChange={changeVolume}
+            onPointerUp={commitVolume}
+            onBlur={commitVolume}
           />
         </div>
       </div>

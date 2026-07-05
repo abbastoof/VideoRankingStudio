@@ -7,10 +7,15 @@ stroke outlines, and rounded background boxes — and later, fully stylized
 rank numbers.
 
 `textJson` fields honored (see packages/types/src/clips.ts clipTextSchema):
-  text, fontFamily, fontSize, fontWeight, color, background, align,
+  text, fontFamily, fontSize, fontWeight, italic, color, background, align,
   strokeColor, strokeWidth, xPct, yPct
 Font sizes are design-space pixels: a 1080-wide portrait/square canvas or a
 1920-wide landscape canvas. Rendering at other resolutions scales linearly.
+
+Italic is synthetic: none of the bundled fonts ship italic faces, so we
+shear the glyph layer ~12° around the block's vertical center — the same
+thing browsers do when the preview asks for `font-style: italic` on these
+families. The background pill stays rectangular, exactly like CSS.
 """
 
 from __future__ import annotations
@@ -138,6 +143,7 @@ def render_text_png(
     stroke_width = round(float(text_json.get("strokeWidth") or 0) * scale)
     stroke_fill = _parse_color(text_json.get("strokeColor"), (0, 0, 0, 255))
     align = str(text_json.get("align") or "center")
+    italic = bool(text_json.get("italic"))
 
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -174,6 +180,61 @@ def render_text_png(
         )
         draw.rounded_rectangle(box, radius=round(font_size * 0.25), fill=background)
 
+    # Glyphs draw onto their own layer so italic can shear text without
+    # distorting the background pill.
+    text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0)) if italic else img
+    _draw_lines(
+        text_layer,
+        lines,
+        font=font,
+        fill=fill,
+        stroke_width=stroke_width,
+        stroke_fill=stroke_fill,
+        align=align,
+        x_pct=x_pct,
+        margin=margin,
+        width=width,
+        center_x=center_x,
+        block_width=block_width,
+        top=top,
+        line_height=line_height,
+    )
+
+    if italic:
+        # Synthetic oblique: shear ~12° anchored at the block's vertical
+        # center. PIL's AFFINE matrix maps output→input, so input_x =
+        # x + k*(y - anchor) leans the top of the glyphs to the right.
+        k = 0.21
+        sheared = text_layer.transform(
+            (width, height),
+            Image.AFFINE,
+            (1, k, -k * center_y, 0, 1, 0),
+            resample=Image.BILINEAR,
+        )
+        img.alpha_composite(sheared)
+
+    img.save(out_path, "PNG")
+    return out_path
+
+
+def _draw_lines(
+    layer: Image.Image,
+    lines: list[str],
+    *,
+    font: Any,
+    fill: tuple[int, int, int, int],
+    stroke_width: int,
+    stroke_fill: tuple[int, int, int, int],
+    align: str,
+    x_pct: Any,
+    margin: int,
+    width: int,
+    center_x: float,
+    block_width: float,
+    top: float,
+    line_height: int,
+) -> None:
+    draw = ImageDraw.Draw(layer)
     for i, line in enumerate(lines):
         line_width = draw.textlength(line, font=font)
         if align == "left" and x_pct is None:
@@ -186,18 +247,14 @@ def render_text_png(
             x = center_x + block_width / 2 - line_width
         else:
             x = center_x - line_width / 2
-        y = top + i * line_height
         draw.text(
-            (x, y),
+            (x, top + i * line_height),
             line,
             font=font,
             fill=fill,
             stroke_width=stroke_width,
             stroke_fill=stroke_fill if stroke_width > 0 else None,
         )
-
-    img.save(out_path, "PNG")
-    return out_path
 
 
 def render_text_clips(

@@ -73,3 +73,26 @@ def test_parse_color_variants():
     assert _parse_color("rgb(10, 20, 30)", (0, 0, 0, 0)) == (10, 20, 30, 255)
     assert _parse_color("bogus", (1, 2, 3, 4)) == (1, 2, 3, 4)
     assert _parse_color(None, (1, 2, 3, 4)) == (1, 2, 3, 4)
+
+
+def test_italic_shears_glyphs_but_not_background(tmp_path: Path):
+    """Synthetic oblique: the sheared glyph layer must lean while the pill
+    stays rectangular — compare against the upright render."""
+    upright = tmp_path / "upright.png"
+    italic = tmp_path / "italic.png"
+    base = {
+        "text": "LEAN",
+        "fontFamily": "Archivo Black",
+        "fontSize": 120,
+        "color": "#ffffff",
+        "yPct": 50,
+    }
+    render_text_png({**base, "italic": False}, width=1080, height=1080, out_path=upright)
+    render_text_png({**base, "italic": True}, width=1080, height=1080, out_path=italic)
+    with Image.open(upright) as u, Image.open(italic) as i:
+        ub, ib = u.getbbox(), i.getbbox()
+        assert ub is not None and ib is not None
+        # The sheared block is wider than the upright one and shifted right
+        # at the top (glyph pixels differ).
+        assert (ib[2] - ib[0]) > (ub[2] - ub[0])
+        assert list(u.getdata()) != list(i.getdata())

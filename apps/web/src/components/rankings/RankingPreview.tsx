@@ -18,7 +18,14 @@ import { computeLayout, DEFAULT_TITLE_STYLE, slotDurationMs } from './ranking-la
  * worker's rasterizer 1:1. Slots follow the reveal order (countdown plays
  * last place first), auto-advance, and honor per-candidate trim + volume.
  */
-export function RankingPreview({ ranking }: { ranking: RankingDetail }) {
+export function RankingPreview({
+  ranking,
+  onMediaError,
+}: {
+  ranking: RankingDetail;
+  /** Fired when a clip fails to load (e.g. presigned URL expired). */
+  onMediaError?: () => void;
+}) {
   const design = useMemo(() => designSize(ranking.aspectRatio), [ranking.aspectRatio]);
   const layout = computeLayout(ranking);
 
@@ -49,7 +56,12 @@ export function RankingPreview({ ranking }: { ranking: RankingDetail }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // `timeupdate` at the trim end and `ended` can both fire for the same
+  // slot — guard so a slot advances exactly once.
+  const advancedRef = useRef(false);
   const advance = useCallback(() => {
+    if (advancedRef.current) return;
+    advancedRef.current = true;
     setSlotElapsedMs(0);
     setSlotIndex((i) => {
       if (i + 1 < slots.length) return i + 1;
@@ -57,6 +69,9 @@ export function RankingPreview({ ranking }: { ranking: RankingDetail }) {
       return 0;
     });
   }, [slots.length]);
+  useEffect(() => {
+    advancedRef.current = false;
+  }, [safeIndex]);
 
   // Timer drives videoless slots and the elapsed readout.
   useEffect(() => {
@@ -119,10 +134,14 @@ export function RankingPreview({ ranking }: { ranking: RankingDetail }) {
   }, [playing, safeIndex, active, advance]);
 
   // React doesn't reliably sync the `muted` attribute after initial render
-  // (facebook/react#10389) — set the property directly.
+  // (facebook/react#10389) — set the property directly. Volume mirrors the
+  // candidate's clip volume the same way the export mixes it.
   useEffect(() => {
-    if (videoRef.current) videoRef.current.muted = muted;
-  }, [muted, safeIndex]);
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = muted;
+    v.volume = Math.min(1, Math.max(0, active?.candidate.volume ?? 1));
+  }, [muted, safeIndex, active?.candidate.volume]);
 
   // Measure the frame so the design canvas can scale to fit.
   const frameRef = useRef<HTMLDivElement>(null);
@@ -178,6 +197,7 @@ export function RankingPreview({ ranking }: { ranking: RankingDetail }) {
                   muted={muted}
                   playsInline
                   preload="metadata"
+                  onError={onMediaError}
                   className="max-h-full max-w-full"
                 />
               </div>
@@ -202,13 +222,17 @@ export function RankingPreview({ ranking }: { ranking: RankingDetail }) {
               </div>
             ) : null}
 
-            {/* Ranking title */}
+            {/* Ranking title. Wrap margin (5%) and the single block-level
+                pill (pad 0.35em, radius 0.25em) mirror the rasterizer's
+                geometry so preview and export match. */}
             {ranking.headerText ? (
               <div
-                className="absolute w-full select-none px-12 text-center leading-tight"
+                className="absolute w-full select-none text-center leading-[1.25]"
                 style={{
                   top: `${headerStyle.yPct ?? layout.headerYPct}%`,
                   transform: 'translateY(-50%)',
+                  paddingLeft: '5%',
+                  paddingRight: '5%',
                   fontFamily: fontCssFor(headerStyle.fontFamily),
                   fontSize: headerStyle.fontSize,
                   fontWeight: headerStyle.bold === false ? 400 : 800,
@@ -225,10 +249,10 @@ export function RankingPreview({ ranking }: { ranking: RankingDetail }) {
                   style={
                     headerStyle.background
                       ? {
+                          display: 'inline-block',
                           backgroundColor: headerStyle.background,
-                          borderRadius: 16,
-                          boxDecorationBreak: 'clone',
-                          padding: '0.15em 0.45em',
+                          borderRadius: '0.25em',
+                          padding: '0.35em',
                         }
                       : undefined
                   }
@@ -241,10 +265,12 @@ export function RankingPreview({ ranking }: { ranking: RankingDetail }) {
             {/* Candidate title */}
             {active?.candidate.title ? (
               <div
-                className="absolute w-full select-none px-12 text-center leading-tight"
+                className="absolute w-full select-none text-center leading-[1.25]"
                 style={{
                   top: `${layout.candidateTitleYPct}%`,
                   transform: 'translateY(-50%)',
+                  paddingLeft: '5%',
+                  paddingRight: '5%',
                   fontFamily: fontCssFor('Rubik'),
                   fontSize: layout.candidateTitleFontSize,
                   fontWeight: 500,

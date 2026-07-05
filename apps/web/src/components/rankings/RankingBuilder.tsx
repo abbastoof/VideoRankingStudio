@@ -3,7 +3,7 @@
 import { Bookmark, CheckCircle2, CircleAlert, History, Plus, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import type { RankingDetail } from '@vrs/sdk';
 import { Button, cn, Spinner } from '@vrs/ui';
@@ -61,6 +61,17 @@ export function RankingBuilder({ initial }: { initial: RankingDetail }) {
   }
 
   const readyCandidates = ranking.candidates.filter((c) => c.assetId).length;
+
+  // Presigned media URLs expire (~1h). When a preview clip errors, re-fetch
+  // fresh URLs — at most once every 30s so a truly broken file can't loop.
+  const lastMediaRefresh = useRef(0);
+  const { refresh } = builder;
+  const onMediaError = useCallback(() => {
+    const now = Date.now();
+    if (now - lastMediaRefresh.current < 30_000) return;
+    lastMediaRefresh.current = now;
+    void refresh().catch(() => {});
+  }, [refresh]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -155,7 +166,7 @@ export function RankingBuilder({ initial }: { initial: RankingDetail }) {
         {/* Preview rail */}
         <aside className="lg:sticky lg:top-6">
           <h2 className="mb-3 text-center text-sm font-semibold text-muted-foreground">Preview</h2>
-          <RankingPreview ranking={ranking} />
+          <RankingPreview ranking={ranking} onMediaError={onMediaError} />
         </aside>
       </div>
     </div>

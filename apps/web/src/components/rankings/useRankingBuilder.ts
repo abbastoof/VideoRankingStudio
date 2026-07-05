@@ -24,15 +24,24 @@ export interface ImportState {
  * API. Meta patches are debounced per burst (600 ms) so slider drags and
  * typing don't stampede the server; structural changes (candidates,
  * reorder) sync immediately.
+ *
+ * `flush()` is the write barrier: it sends the pending debounced patch AND
+ * drains every in-flight save, so callers (Generate) know the server has
+ * everything the UI shows before they bake.
  */
 export function useRankingBuilder(initial: RankingDetail) {
   const [ranking, setRanking] = useState<RankingDetail>(initial);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [imports, setImports] = useState<Record<string, ImportState>>({});
 
+  // Always-current mirror so callbacks can read the latest state without
+  // doing work inside setState updaters (which must stay pure).
+  const rankingRef = useRef(ranking);
+  rankingRef.current = ranking;
+
   const pendingMeta = useRef<RankingMetaPatch>({});
   const metaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inflight = useRef(0);
+  const inflightOps = useRef(new Set<Promise<unknown>>());
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -41,25 +50,52 @@ export function useRankingBuilder(initial: RankingDetail) {
     };
   }, []);
 
-  const track = useCallback(async <T,>(op: () => Promise<T>): Promise<T | undefined> => {
-    inflight.current += 1;
+  const track = useCallback(async <T,>(op: () => Promise<T>): Promise<T> => {
     setSaveState('saving');
+    const p = op();
+    inflightOps.current.add(p);
     try {
-      const out = await op();
-      inflight.current -= 1;
-      if (mounted.current && inflight.current === 0) setSaveState('saved');
+      const out = await p;
+      if (mounted.current && inflightOps.current.size === 1) setSaveState('saved');
       return out;
     } catch (err) {
-      inflight.current -= 1;
       if (mounted.current) setSaveState('error');
       throw err;
+    } finally {
+      inflightOps.current.delete(p);
     }
   }, []);
 
+  /** Wait until no save is in flight (new ops started meanwhile included). */
+  const drainSaves = useCallback(async () => {
+    while (inflightOps.current.size > 0) {
+      await Promise.allSettled([...inflightOps.current]);
+    }
+  }, []);
+
+  /**
+   * Re-fetch from the server. Runs after structural changes (add, import,
+   * upload). Drains in-flight saves first and re-applies the not-yet-sent
+   * debounced meta patch so a refresh never rolls back what the user sees.
+   */
   const refresh = useCallback(async () => {
+    await drainSaves();
     const data = await clientSdk().getRanking(initial.projectId);
-    if (mounted.current) setRanking(data);
-  }, [initial.projectId]);
+    if (mounted.current) {
+      setRanking({ ...data, ...(pendingMeta.current as Partial<RankingDetail>) });
+    }
+  }, [drainSaves, initial.projectId]);
+
+  /** Order candidates locally the way the server will (score or stored). */
+  const applyServerOrder = useCallback((serverCandidates: Array<{ id: string }>) => {
+    setRanking((r) => {
+      const pos = new Map(serverCandidates.map((c, i) => [c.id, i]));
+      const next = [...r.candidates].sort(
+        (a, b) => (pos.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (pos.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+      );
+      return { ...r, candidates: next };
+    });
+  }, []);
 
   /** Optimistic local meta update + debounced PATCH. */
   const patchMeta = useCallback(
@@ -71,13 +107,22 @@ export function useRankingBuilder(initial: RankingDetail) {
         const body = pendingMeta.current;
         pendingMeta.current = {};
         metaTimer.current = null;
-        void track(() => clientSdk().updateRanking(initial.projectId, body)).catch(() => {});
+        const reorders = body.order !== undefined || body.orderMode !== undefined;
+        void track(async () => {
+          const data = await clientSdk().updateRanking(initial.projectId, body);
+          // Ordering semantics changed: adopt the server's candidate order so
+          // the cards + preview show what Generate will bake.
+          if (reorders && mounted.current) applyServerOrder(data.candidates);
+        }).catch(() => {});
       }, 600);
     },
-    [initial.projectId, track],
+    [applyServerOrder, initial.projectId, track],
   );
 
-  /** Flush any debounced meta patch immediately (Save as Draft, Generate). */
+  /**
+   * Write barrier: send the pending debounced meta patch, then wait for every
+   * in-flight save (meta, candidate, reorder) to settle.
+   */
   const flush = useCallback(async () => {
     if (metaTimer.current) {
       clearTimeout(metaTimer.current);
@@ -86,19 +131,30 @@ export function useRankingBuilder(initial: RankingDetail) {
     if (Object.keys(pendingMeta.current).length > 0) {
       const body = pendingMeta.current;
       pendingMeta.current = {};
-      await track(() => clientSdk().updateRanking(initial.projectId, body));
+      const reorders = body.order !== undefined || body.orderMode !== undefined;
+      await track(async () => {
+        const data = await clientSdk().updateRanking(initial.projectId, body);
+        if (reorders && mounted.current) applyServerOrder(data.candidates);
+      });
     }
-  }, [initial.projectId, track]);
+    await drainSaves();
+  }, [applyServerOrder, drainSaves, initial.projectId, track]);
 
+  // Unmount: the debounced patch would otherwise be lost — fire best-effort.
   useEffect(
     () => () => {
       if (metaTimer.current) clearTimeout(metaTimer.current);
+      if (Object.keys(pendingMeta.current).length > 0) {
+        const body = pendingMeta.current;
+        pendingMeta.current = {};
+        void clientSdk().updateRanking(initial.projectId, body).catch(() => {});
+      }
     },
-    [],
+    [initial.projectId],
   );
 
   const patchCandidate = useCallback(
-    (candidateId: string, patch: RankingCandidatePatch, opts?: { debounce?: boolean }) => {
+    (candidateId: string, patch: RankingCandidatePatch) => {
       setRanking((r) => ({
         ...r,
         candidates: r.candidates.map((c) =>
@@ -110,13 +166,12 @@ export function useRankingBuilder(initial: RankingDetail) {
       void track(() =>
         clientSdk().updateRankingCandidate(initial.projectId, candidateId, patch),
       ).catch(() => {});
-      void opts;
     },
     [initial.projectId, track],
   );
 
   const addCandidate = useCallback(async () => {
-    const n = ranking.candidates.length + 1;
+    const n = rankingRef.current.candidates.length + 1;
     await track(async () => {
       await clientSdk().addRankingCandidate(initial.projectId, {
         title: `Video ${n}`,
@@ -124,7 +179,7 @@ export function useRankingBuilder(initial: RankingDetail) {
       });
     });
     await refresh();
-  }, [initial.projectId, ranking.candidates.length, refresh, track]);
+  }, [initial.projectId, refresh, track]);
 
   const removeCandidate = useCallback(
     async (candidateId: string) => {
@@ -139,38 +194,35 @@ export function useRankingBuilder(initial: RankingDetail) {
 
   const moveCandidate = useCallback(
     (candidateId: string, dir: 'up' | 'down') => {
-      setRanking((r) => {
-        const idx = r.candidates.findIndex((c) => c.id === candidateId);
-        const target = dir === 'up' ? idx - 1 : idx + 1;
-        if (idx === -1 || target < 0 || target >= r.candidates.length) return r;
-        const next = r.candidates.slice();
-        [next[idx], next[target]] = [next[target]!, next[idx]!];
-        void track(() =>
-          clientSdk().reorderRankingCandidates(
-            r.projectId,
-            next.map((c) => c.id),
-          ),
-        ).catch(() => {});
-        return { ...r, candidates: next };
-      });
+      const current = rankingRef.current.candidates;
+      const idx = current.findIndex((c) => c.id === candidateId);
+      const target = dir === 'up' ? idx - 1 : idx + 1;
+      if (idx === -1 || target < 0 || target >= current.length) return;
+      const next = current.slice();
+      [next[idx], next[target]] = [next[target]!, next[idx]!];
+      setRanking((r) => ({ ...r, candidates: next }));
+      void track(() =>
+        clientSdk().reorderRankingCandidates(
+          initial.projectId,
+          next.map((c) => c.id),
+        ),
+      ).catch(() => {});
     },
-    [track],
+    [initial.projectId, track],
   );
 
   const reorderTo = useCallback(
     (orderedIds: string[]) => {
-      setRanking((r) => {
-        const byId = new Map(r.candidates.map((c) => [c.id, c]));
-        const next = orderedIds
-          .map((id) => byId.get(id))
-          .filter((c): c is NonNullable<typeof c> => Boolean(c));
-        void track(() => clientSdk().reorderRankingCandidates(r.projectId, orderedIds)).catch(
-          () => {},
-        );
-        return { ...r, candidates: next };
-      });
+      const byId = new Map(rankingRef.current.candidates.map((c) => [c.id, c]));
+      const next = orderedIds
+        .map((id) => byId.get(id))
+        .filter((c): c is NonNullable<typeof c> => Boolean(c));
+      setRanking((r) => ({ ...r, candidates: next }));
+      void track(() => clientSdk().reorderRankingCandidates(initial.projectId, orderedIds)).catch(
+        () => {},
+      );
     },
-    [track],
+    [initial.projectId, track],
   );
 
   /** Import a platform link into a candidate: spinner → asset + auto-title. */
@@ -201,7 +253,8 @@ export function useRankingBuilder(initial: RankingDetail) {
           await sleep(1500);
         }
 
-        const current = ranking.candidates.find((c) => c.id === candidateId);
+        // Read the candidate as it is NOW, not as it was at click time.
+        const current = rankingRef.current.candidates.find((c) => c.id === candidateId);
         const patch: RankingCandidatePatch = {
           assetId,
           sourceUrl: url,
@@ -226,7 +279,7 @@ export function useRankingBuilder(initial: RankingDetail) {
         }));
       }
     },
-    [initial.projectId, ranking.candidates, refresh, track],
+    [initial.projectId, refresh, track],
   );
 
   /** Upload a local file into a candidate via the presigned flow. */
