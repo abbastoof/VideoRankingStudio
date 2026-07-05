@@ -6,26 +6,28 @@ import { requireAuth } from '../middleware/auth';
 
 const idParams = z.object({ id: z.string() });
 
+// `z.coerce.boolean()` turns the string "false" into true — parse explicitly.
+const queryBool = z
+  .enum(['true', 'false', '1', '0'])
+  .optional()
+  .transform((v) => v === 'true' || v === '1');
+
+const listQuerySchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+  unreadOnly: queryBool,
+});
+
 export async function notificationsRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireAuth);
 
   app.get('/notifications', {
     schema: {
       tags: ['notifications'],
-      querystring: z.object({
-        cursor: z.string().optional(),
-        limit: z.coerce.number().int().min(1).max(100).default(30),
-        unreadOnly: z.coerce.boolean().default(false),
-      }),
+      querystring: listQuerySchema,
     },
     handler: async (req) => {
-      const q = z
-        .object({
-          cursor: z.string().optional(),
-          limit: z.coerce.number().int().min(1).max(100).default(30),
-          unreadOnly: z.coerce.boolean().default(false),
-        })
-        .parse(req.query);
+      const q = listQuerySchema.parse(req.query);
       const rows = await prisma.notification.findMany({
         where: { userId: req.auth!.sub, ...(q.unreadOnly ? { readAt: null } : {}) },
         take: q.limit + 1,

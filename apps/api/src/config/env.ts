@@ -5,6 +5,23 @@ import { z } from 'zod';
  * missing or malformed, which beats hunting NPEs at request time.
  */
 
+/**
+ * Env-var boolean. `z.coerce.boolean()` is a footgun here: it runs the value
+ * through `Boolean(...)`, so the string "false" coerces to true — meaning
+ * `SMTP_SECURE=false` in a .env forced TLS on and `SESSION_COOKIE_SECURE=false`
+ * marked cookies Secure over plain http.
+ */
+function boolFromEnv(defaultValue: boolean) {
+  return z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((v) => {
+      if (v === undefined || v === '') return defaultValue;
+      if (typeof v === 'boolean') return v;
+      return ['true', '1', 'yes', 'on'].includes(v.toLowerCase());
+    });
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
@@ -30,7 +47,7 @@ const envSchema = z.object({
   S3_REGION: z.string().default('us-east-1'),
   S3_ACCESS_KEY_ID: z.string().min(1),
   S3_SECRET_ACCESS_KEY: z.string().min(1),
-  S3_FORCE_PATH_STYLE: z.coerce.boolean().default(false),
+  S3_FORCE_PATH_STYLE: boolFromEnv(false),
   S3_BUCKET_UPLOADS: z.string().min(1),
   S3_BUCKET_GENERATED: z.string().min(1),
   S3_BUCKET_EXPORTS: z.string().min(1),
@@ -48,7 +65,7 @@ const envSchema = z.object({
   OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().nonnegative().default(60),
   SESSION_COOKIE_NAME: z.string().default('vrs_session'),
   SESSION_COOKIE_DOMAIN: z.string().optional(),
-  SESSION_COOKIE_SECURE: z.coerce.boolean().default(false),
+  SESSION_COOKIE_SECURE: boolFromEnv(false),
   SESSION_COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
 
   // Email
@@ -60,7 +77,7 @@ const envSchema = z.object({
   SMTP_PORT: z.coerce.number().int().optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
-  SMTP_SECURE: z.coerce.boolean().default(false),
+  SMTP_SECURE: boolFromEnv(false),
   SENDGRID_API_KEY: z.string().optional(),
   SES_REGION: z.string().optional(),
 
