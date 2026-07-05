@@ -70,7 +70,7 @@ export function RankingBuilder({ initial }: { initial: RankingDetail }) {
           <SaveBadge state={saveState} />
         </div>
         <Link
-          href="/dashboard"
+          href="/rankings"
           className={cn(
             'inline-flex items-center gap-1.5 rounded-full border border-border px-3.5 py-1.5 text-sm text-brand-700 transition-colors',
             'hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400',

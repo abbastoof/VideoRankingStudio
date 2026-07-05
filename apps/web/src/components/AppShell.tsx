@@ -7,7 +7,6 @@ import {
   LifeBuoy,
   ListOrdered,
   LogOut,
-  Mic2,
   Plus,
   Settings,
   ShieldCheck,
@@ -34,9 +33,8 @@ interface AppShellProps {
 const nav = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/projects', label: 'Projects', icon: Video },
-  { href: '/rankings/new', label: 'Rankings', icon: ListOrdered },
+  { href: '/rankings', label: 'Video Ranking', icon: ListOrdered },
   { href: '/templates', label: 'Templates', icon: Sparkles },
-  { href: '/voices', label: 'Voices', icon: Mic2 },
   { href: '/insights', label: 'Insights', icon: BarChart3 },
 ];
 
