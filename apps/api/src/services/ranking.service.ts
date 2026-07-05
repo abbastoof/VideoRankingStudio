@@ -482,7 +482,9 @@ export async function bakeTimeline(userId: string, projectId: string) {
             strokeColor: '#000000',
             strokeWidth: 10,
             xPct: styles.number.xPct,
-            yPct: Math.max(4, videoTopPct * 0.55),
+            // Straddles the video's top corner — clear of both titles.
+            // Mirrors computeLayout in apps/web ranking-layout.ts.
+            yPct: videoTopPct + 4.5,
           } as Prisma.InputJsonValue,
           metadataJson: {
             role: 'ranking:number',
@@ -514,7 +516,9 @@ export async function bakeTimeline(userId: string, projectId: string) {
           strokeColor: styles.title.strokeColor,
           strokeWidth: styles.title.strokeWidth,
           xPct: null,
-          yPct: Math.max(8, videoTopPct - 4),
+          // Just above the video edge, clear of the header pill.
+          // Mirrors computeLayout in apps/web ranking-layout.ts.
+          yPct: Math.max(videoTopPct - 2, 11),
         } as Prisma.InputJsonValue,
         metadataJson: {
           role: 'ranking:overlay',

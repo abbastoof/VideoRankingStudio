@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { getRedis } from '../config/redis';
+import { getBrokerRedis } from '../config/redis';
 import { env } from '../config/env';
 import { logger } from '../lib/logger';
 
@@ -97,7 +97,7 @@ function celeryMessage(
 }
 
 async function publishViaRedis(queue: string, payload: ReturnType<typeof celeryMessage>): Promise<void> {
-  const redis = getRedis();
+  const redis = getBrokerRedis();
   const envelope = {
     body: payload.body,
     'content-encoding': 'utf-8',

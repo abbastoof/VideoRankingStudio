@@ -29,11 +29,16 @@ export function computeLayout(ranking: Pick<RankingDetail, 'videoHeightPct'>): R
   return {
     videoHeightPct,
     videoTopPct,
+    // Vertical stack (all values are block centers): ranking title pinned in
+    // the top band; candidate title just above the video edge but always
+    // clear of the header pill; rank number straddling the video's top
+    // corner (Viblo's look) so a center-positioned number never lands on
+    // the titles. Mirrored by bakeTimeline in ranking.service.ts.
     headerYPct: 6,
     numberXPct: 16,
-    numberYPct: Math.max(4, videoTopPct * 0.55),
+    numberYPct: videoTopPct + 4.5,
     numberFontSize: 170,
-    candidateTitleYPct: Math.max(8, videoTopPct - 4),
+    candidateTitleYPct: Math.max(videoTopPct - 2, 11),
     candidateTitleFontSize: 44,
   };
 }

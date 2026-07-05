@@ -91,16 +91,18 @@ export async function tryReserve(
   kind: UsageKind,
   requested: number,
 ): Promise<boolean> {
-  await getOrCreateUsage(userId, kind);
-  const { start } = currentPeriod();
-  // Postgres CTE: only bump `used` when the projected total fits the limit.
-  // -1 encodes "unlimited" and always passes.
+  const record = await getOrCreateUsage(userId, kind);
+  // Guarded UPDATE keyed by primary key: only bump `used` when the projected
+  // total fits the limit. -1 encodes "unlimited" and always passes.
+  //
+  // Deliberately NOT matched on periodStart: comparing the naive-timestamp
+  // column against a Date param in raw SQL depends on the DB server's
+  // timezone — on a non-UTC server the coercion shifts the column, the row
+  // never matches, and every reserve fails as a 402.
   const res = await prisma.$executeRaw`
     UPDATE "UsageRecord"
     SET "used" = "used" + ${BigInt(requested)}::bigint
-    WHERE "userId" = ${userId}
-      AND "kind"::text = ${kind}
-      AND "periodStart" = ${start}
+    WHERE "id" = ${record.id}
       AND ("limit" = -1 OR "used" + ${BigInt(requested)}::bigint <= "limit")
   `;
   return Number(res) > 0;
