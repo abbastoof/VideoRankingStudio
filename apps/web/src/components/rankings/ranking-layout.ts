@@ -73,3 +73,77 @@ export const DEFAULT_TITLE_STYLE = {
   strokeColor: '#000000',
   strokeWidth: 0,
 };
+
+/** Per-candidate "Video Title" tab defaults (Viblo uses Rubik 20px-ish). */
+export const DEFAULT_CANDIDATE_TITLE_STYLE = {
+  fontFamily: 'Rubik',
+  fontSize: 44,
+  bold: false,
+  italic: false,
+  color: '#ffffff',
+  background: null as string | null,
+  strokeColor: '#000000',
+  strokeWidth: 0,
+};
+
+export interface NumberStyle {
+  visible: boolean;
+  /** null = use the ranking's accent color. */
+  color: string | null;
+  fontSize: number;
+  position: 'left' | 'center' | 'right';
+}
+
+export const DEFAULT_NUMBER_STYLE: NumberStyle = {
+  visible: true,
+  color: null,
+  fontSize: 170,
+  position: 'left',
+};
+
+export const NUMBER_SIZE_OPTIONS: Array<{ label: string; value: number }> = [
+  { label: 'Small', value: 120 },
+  { label: 'Medium', value: 170 },
+  { label: 'Large', value: 230 },
+];
+
+export function numberXPct(position: NumberStyle['position']): number {
+  return { left: 16, center: 50, right: 84 }[position];
+}
+
+/**
+ * Defensive read of per-candidate styles from metadataJson (untyped JSON —
+ * older candidates may have nothing, garbage, or partial objects).
+ */
+export function candidateStyles(metadataJson: Record<string, unknown> | undefined): {
+  titleStyle: typeof DEFAULT_CANDIDATE_TITLE_STYLE;
+  numberStyle: NumberStyle;
+} {
+  const raw = metadataJson ?? {};
+  const t = (typeof raw.titleStyle === 'object' && raw.titleStyle !== null ? raw.titleStyle : {}) as Record<string, unknown>;
+  const n = (typeof raw.numberStyle === 'object' && raw.numberStyle !== null ? raw.numberStyle : {}) as Record<string, unknown>;
+  return {
+    titleStyle: {
+      ...DEFAULT_CANDIDATE_TITLE_STYLE,
+      ...(typeof t.fontFamily === 'string' ? { fontFamily: t.fontFamily } : {}),
+      ...(typeof t.fontSize === 'number' ? { fontSize: t.fontSize } : {}),
+      ...(typeof t.bold === 'boolean' ? { bold: t.bold } : {}),
+      ...(typeof t.italic === 'boolean' ? { italic: t.italic } : {}),
+      ...(typeof t.color === 'string' ? { color: t.color } : {}),
+      ...(typeof t.background === 'string' || t.background === null
+        ? { background: t.background as string | null }
+        : {}),
+      ...(typeof t.strokeColor === 'string' ? { strokeColor: t.strokeColor } : {}),
+      ...(typeof t.strokeWidth === 'number' ? { strokeWidth: t.strokeWidth } : {}),
+    },
+    numberStyle: {
+      ...DEFAULT_NUMBER_STYLE,
+      ...(typeof n.visible === 'boolean' ? { visible: n.visible } : {}),
+      ...(typeof n.color === 'string' || n.color === null ? { color: n.color as string | null } : {}),
+      ...(typeof n.fontSize === 'number' ? { fontSize: n.fontSize } : {}),
+      ...(n.position === 'left' || n.position === 'center' || n.position === 'right'
+        ? { position: n.position }
+        : {}),
+    },
+  };
+}

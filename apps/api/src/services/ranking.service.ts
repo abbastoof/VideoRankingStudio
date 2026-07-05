@@ -457,35 +457,40 @@ export async function bakeTimeline(userId: string, projectId: string) {
         });
       }
 
-      // Big stylized rank number, top-left.
-      clips.push({
-        trackId: overlayTrack.id,
-        source: 'TEXT',
-        startMs: start,
-        durationMs,
-        inMs: 0,
-        outMs: durationMs,
-        textJson: {
-          text: `${rank}.`,
-          fontFamily: 'Archivo Black',
-          fontSize: 170,
-          fontWeight: 800,
-          italic: false,
-          color: brand,
-          background: null,
-          align: 'left',
-          animation: 'pop',
-          strokeColor: '#000000',
-          strokeWidth: 10,
-          xPct: 16,
-          yPct: Math.max(4, videoTopPct * 0.55),
-        } as Prisma.InputJsonValue,
-        metadataJson: {
-          role: 'ranking:number',
-          candidateId: c.id,
-          rank,
-        } as Prisma.InputJsonValue,
-      });
+      // Per-candidate styles from the card's Video Title / Number tabs.
+      const styles = candidateOverlayStyles(c.metadataJson);
+
+      // Big stylized rank number (hideable, positionable).
+      if (styles.number.visible) {
+        clips.push({
+          trackId: overlayTrack.id,
+          source: 'TEXT',
+          startMs: start,
+          durationMs,
+          inMs: 0,
+          outMs: durationMs,
+          textJson: {
+            text: `${rank}.`,
+            fontFamily: 'Archivo Black',
+            fontSize: styles.number.fontSize,
+            fontWeight: 800,
+            italic: false,
+            color: styles.number.color ?? brand,
+            background: null,
+            align: 'left',
+            animation: 'pop',
+            strokeColor: '#000000',
+            strokeWidth: 10,
+            xPct: styles.number.xPct,
+            yPct: Math.max(4, videoTopPct * 0.55),
+          } as Prisma.InputJsonValue,
+          metadataJson: {
+            role: 'ranking:number',
+            candidateId: c.id,
+            rank,
+          } as Prisma.InputJsonValue,
+        });
+      }
 
       // Candidate title just above the video block.
       const titleText = c.subtitle ? `${c.title}\n${c.subtitle}` : c.title;
@@ -498,16 +503,16 @@ export async function bakeTimeline(userId: string, projectId: string) {
         outMs: durationMs,
         textJson: {
           text: titleText,
-          fontFamily: 'Rubik',
-          fontSize: 44,
-          fontWeight: 500,
-          italic: false,
-          color: '#ffffff',
-          background: null,
+          fontFamily: styles.title.fontFamily,
+          fontSize: styles.title.fontSize,
+          fontWeight: styles.title.bold ? 700 : 500,
+          italic: styles.title.italic,
+          color: styles.title.color,
+          background: styles.title.background,
           align: 'center',
           animation: 'fade-in',
-          strokeColor: '#000000',
-          strokeWidth: 0,
+          strokeColor: styles.title.strokeColor,
+          strokeWidth: styles.title.strokeWidth,
           xPct: null,
           yPct: Math.max(8, videoTopPct - 4),
         } as Prisma.InputJsonValue,
@@ -532,6 +537,52 @@ export async function bakeTimeline(userId: string, projectId: string) {
   });
 
   return { durationMs: totalMs };
+}
+
+/**
+ * Defensive read of the per-candidate overlay styles stored by the builder's
+ * Video Title / Number Appearance tabs (metadataJson is untyped JSON —
+ * mirror of candidateStyles in apps/web ranking-layout.ts).
+ */
+function candidateOverlayStyles(metadataJson: Record<string, unknown> | undefined): {
+  title: {
+    fontFamily: string;
+    fontSize: number;
+    bold: boolean;
+    italic: boolean;
+    color: string;
+    background: string | null;
+    strokeColor: string;
+    strokeWidth: number;
+  };
+  number: { visible: boolean; color: string | null; fontSize: number; xPct: number };
+} {
+  const raw = metadataJson ?? {};
+  const t = (typeof raw.titleStyle === 'object' && raw.titleStyle !== null
+    ? raw.titleStyle
+    : {}) as Record<string, unknown>;
+  const n = (typeof raw.numberStyle === 'object' && raw.numberStyle !== null
+    ? raw.numberStyle
+    : {}) as Record<string, unknown>;
+  const position = n.position === 'center' ? 50 : n.position === 'right' ? 84 : 16;
+  return {
+    title: {
+      fontFamily: typeof t.fontFamily === 'string' ? t.fontFamily : 'Rubik',
+      fontSize: typeof t.fontSize === 'number' ? t.fontSize : 44,
+      bold: t.bold === true,
+      italic: t.italic === true,
+      color: typeof t.color === 'string' ? t.color : '#ffffff',
+      background: typeof t.background === 'string' ? t.background : null,
+      strokeColor: typeof t.strokeColor === 'string' ? t.strokeColor : '#000000',
+      strokeWidth: typeof t.strokeWidth === 'number' ? t.strokeWidth : 0,
+    },
+    number: {
+      visible: n.visible !== false,
+      color: typeof n.color === 'string' ? n.color : null,
+      fontSize: typeof n.fontSize === 'number' ? n.fontSize : 170,
+      xPct: position,
+    },
+  };
 }
 
 /** Stored order when custom; score sort otherwise. */

@@ -9,7 +9,13 @@ import { cn } from '@vrs/ui';
 import { fontCssFor } from '@/lib/fonts';
 import { strokeShadow } from '@/lib/text-style';
 
-import { computeLayout, DEFAULT_TITLE_STYLE, slotDurationMs } from './ranking-layout';
+import {
+  candidateStyles,
+  computeLayout,
+  DEFAULT_TITLE_STYLE,
+  numberXPct,
+  slotDurationMs,
+} from './ranking-layout';
 
 /**
  * Live phone-frame preview of the ranking composition.
@@ -161,6 +167,7 @@ export function RankingPreview({
 
   const headerStyle = { ...DEFAULT_TITLE_STYLE, ...(ranking.titleStyle ?? {}) };
   const brand = ranking.brandColor ?? '#f97316';
+  const activeStyles = candidateStyles(active?.candidate.metadataJson);
 
   return (
     <div className="space-y-3">
@@ -205,16 +212,16 @@ export function RankingPreview({
             ) : null}
 
             {/* Rank number */}
-            {active ? (
+            {active && activeStyles.numberStyle.visible ? (
               <div
                 className="absolute select-none leading-none"
                 style={{
-                  left: `${layout.numberXPct}%`,
+                  left: `${numberXPct(activeStyles.numberStyle.position)}%`,
                   top: `${layout.numberYPct}%`,
                   transform: 'translate(-50%, -50%)',
                   fontFamily: fontCssFor('Archivo Black'),
-                  fontSize: layout.numberFontSize,
-                  color: brand,
+                  fontSize: activeStyles.numberStyle.fontSize,
+                  color: activeStyles.numberStyle.color ?? brand,
                   textShadow: strokeShadow(10, '#000000'),
                 }}
                 aria-hidden
@@ -263,7 +270,7 @@ export function RankingPreview({
               </div>
             ) : null}
 
-            {/* Candidate title */}
+            {/* Candidate title (styled via the card's Video Title tab) */}
             {active?.candidate.title ? (
               <div
                 className="absolute w-full select-none text-center leading-[1.25]"
@@ -272,19 +279,45 @@ export function RankingPreview({
                   transform: 'translateY(-50%)',
                   paddingLeft: '5%',
                   paddingRight: '5%',
-                  fontFamily: fontCssFor('Rubik'),
-                  fontSize: layout.candidateTitleFontSize,
-                  fontWeight: 500,
-                  color: '#ffffff',
+                  fontFamily: fontCssFor(activeStyles.titleStyle.fontFamily),
+                  fontSize: activeStyles.titleStyle.fontSize,
+                  fontWeight: activeStyles.titleStyle.bold ? 700 : 500,
+                  fontStyle: activeStyles.titleStyle.italic ? 'italic' : undefined,
+                  color: activeStyles.titleStyle.color,
+                  textShadow:
+                    activeStyles.titleStyle.strokeWidth > 0
+                      ? strokeShadow(
+                          activeStyles.titleStyle.strokeWidth,
+                          activeStyles.titleStyle.strokeColor,
+                        )
+                      : undefined,
                 }}
                 aria-hidden
               >
-                {active.candidate.title}
-                {active.candidate.subtitle ? (
-                  <div style={{ fontSize: layout.candidateTitleFontSize * 0.7, opacity: 0.85 }}>
-                    {active.candidate.subtitle}
-                  </div>
-                ) : null}
+                <span
+                  style={
+                    activeStyles.titleStyle.background
+                      ? {
+                          display: 'inline-block',
+                          backgroundColor: activeStyles.titleStyle.background,
+                          borderRadius: '0.25em',
+                          padding: '0.35em',
+                        }
+                      : undefined
+                  }
+                >
+                  {active.candidate.title}
+                  {active.candidate.subtitle ? (
+                    <div
+                      style={{
+                        fontSize: activeStyles.titleStyle.fontSize * 0.7,
+                        opacity: 0.85,
+                      }}
+                    >
+                      {active.candidate.subtitle}
+                    </div>
+                  ) : null}
+                </span>
               </div>
             ) : null}
 

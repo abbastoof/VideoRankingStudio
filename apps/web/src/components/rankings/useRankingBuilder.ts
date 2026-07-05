@@ -121,15 +121,55 @@ export function useRankingBuilder(initial: RankingDetail) {
     [applyServerOrder, initial.projectId, track],
   );
 
+  // Debounced candidate patches for continuous controls (style sliders,
+  // color drags). NOTE: the server replaces metadataJson wholesale, so
+  // callers must pass the FULL metadataJson object, not a delta — build it
+  // from the candidate prop, which the optimistic update keeps current.
+  const pendingCandidates = useRef<Record<string, RankingCandidatePatch>>({});
+  const candidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const sendPendingCandidates = useCallback(() => {
+    const pending = pendingCandidates.current;
+    pendingCandidates.current = {};
+    if (candidateTimer.current) {
+      clearTimeout(candidateTimer.current);
+      candidateTimer.current = null;
+    }
+    for (const [candidateId, patch] of Object.entries(pending)) {
+      void track(() =>
+        clientSdk().updateRankingCandidate(initial.projectId, candidateId, patch),
+      ).catch(() => {});
+    }
+  }, [initial.projectId, track]);
+
+  const patchCandidateDebounced = useCallback(
+    (candidateId: string, patch: RankingCandidatePatch) => {
+      setRanking((r) => ({
+        ...r,
+        candidates: r.candidates.map((c) =>
+          c.id === candidateId ? { ...c, ...(patch as Partial<typeof c>) } : c,
+        ),
+      }));
+      pendingCandidates.current[candidateId] = {
+        ...pendingCandidates.current[candidateId],
+        ...patch,
+      };
+      if (candidateTimer.current) clearTimeout(candidateTimer.current);
+      candidateTimer.current = setTimeout(sendPendingCandidates, 600);
+    },
+    [sendPendingCandidates],
+  );
+
   /**
-   * Write barrier: send the pending debounced meta patch, then wait for every
-   * in-flight save (meta, candidate, reorder) to settle.
+   * Write barrier: send the pending debounced meta + candidate patches, then
+   * wait for every in-flight save (meta, candidate, reorder) to settle.
    */
   const flush = useCallback(async () => {
     if (metaTimer.current) {
       clearTimeout(metaTimer.current);
       metaTimer.current = null;
     }
+    sendPendingCandidates();
     if (Object.keys(pendingMeta.current).length > 0) {
       const body = pendingMeta.current;
       pendingMeta.current = {};
@@ -140,16 +180,24 @@ export function useRankingBuilder(initial: RankingDetail) {
       });
     }
     await drainSaves();
-  }, [applyServerOrder, drainSaves, initial.projectId, track]);
+  }, [applyServerOrder, drainSaves, initial.projectId, sendPendingCandidates, track]);
 
-  // Unmount: the debounced patch would otherwise be lost — fire best-effort.
+  // Unmount: the debounced patches would otherwise be lost — fire best-effort.
   useEffect(
     () => () => {
       if (metaTimer.current) clearTimeout(metaTimer.current);
+      if (candidateTimer.current) clearTimeout(candidateTimer.current);
       if (Object.keys(pendingMeta.current).length > 0) {
         const body = pendingMeta.current;
         pendingMeta.current = {};
         void clientSdk().updateRanking(initial.projectId, body).catch(() => {});
+      }
+      const pending = pendingCandidates.current;
+      pendingCandidates.current = {};
+      for (const [candidateId, patch] of Object.entries(pending)) {
+        void clientSdk()
+          .updateRankingCandidate(initial.projectId, candidateId, patch)
+          .catch(() => {});
       }
     },
     [initial.projectId],
@@ -336,6 +384,7 @@ export function useRankingBuilder(initial: RankingDetail) {
     imports,
     patchMeta,
     patchCandidate,
+    patchCandidateDebounced,
     addCandidate,
     removeCandidate,
     moveCandidate,

@@ -3,7 +3,7 @@
 import { ArrowDown, ArrowRight, ArrowUp, Instagram, Trash2, Youtube } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 
-import type { RankingCandidateDetail, RankingCandidatePatch } from '@vrs/sdk';
+import type { RankingCandidateDetail, RankingCandidatePatch, RankingTitleStyle } from '@vrs/sdk';
 import {
   Card,
   CardContent,
@@ -11,12 +11,25 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  ColorPicker,
   Dropzone,
+  Select,
   Spinner,
+  Switch,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   useConfirm,
 } from '@vrs/ui';
 
 import type { ImportState } from './useRankingBuilder';
+import {
+  candidateStyles,
+  NUMBER_SIZE_OPTIONS,
+  type NumberStyle,
+} from './ranking-layout';
+import { TitleStyleToolbar, TitleStrokeRow } from './TitleStyleToolbar';
 import { TrimBar } from './TrimBar';
 
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
@@ -26,7 +39,11 @@ export interface CandidateCardProps {
   index: number;
   count: number;
   importState: ImportState | undefined;
+  /** Accent color of the ranking — the number's default color. */
+  brandColor: string;
   onPatch: (patch: RankingCandidatePatch) => void;
+  /** Debounced variant for continuous controls (style edits). */
+  onPatchDebounced: (patch: RankingCandidatePatch) => void;
   onImportUrl: (url: string) => void;
   onUploadFile: (file: File) => void;
   onMove: (dir: 'up' | 'down') => void;
@@ -42,7 +59,9 @@ export function CandidateCard({
   index,
   count,
   importState,
+  brandColor,
   onPatch,
+  onPatchDebounced,
   onImportUrl,
   onUploadFile,
   onMove,
@@ -94,7 +113,12 @@ export function CandidateCard({
 
           <CollapsibleContent className="pt-4">
             {hasVideo ? (
-              <AttachedBody candidate={candidate} onPatch={onPatch} />
+              <AttachedBody
+                candidate={candidate}
+                brandColor={brandColor}
+                onPatch={onPatch}
+                onPatchDebounced={onPatchDebounced}
+              />
             ) : (
               <EmptyBody
                 importing={importing}
@@ -224,40 +248,25 @@ function EmptyBody({
   );
 }
 
-/** After attach: title field, inline player, trim + volume. */
+/** After attach: inline player, trim + volume, then the per-video tabs. */
 function AttachedBody({
   candidate,
+  brandColor,
   onPatch,
+  onPatchDebounced,
 }: {
   candidate: RankingCandidateDetail;
+  brandColor: string;
   onPatch: (patch: RankingCandidatePatch) => void;
+  onPatchDebounced: (patch: RankingCandidatePatch) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const titleId = useId();
   const processing = candidate.assetStatus !== 'READY' && candidate.assetStatus !== 'UPLOADED';
   const durationMs = candidate.assetDurationMs ?? 0;
+  const [tab, setTab] = useState('title');
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1.5">
-        <label htmlFor={titleId} className="text-xs font-medium text-muted-foreground">
-          Video Title
-        </label>
-        <input
-          id={titleId}
-          type="text"
-          defaultValue={candidate.title}
-          key={candidate.title /* refresh after auto-fill */}
-          maxLength={200}
-          placeholder="Enter video title..."
-          onBlur={(e) => {
-            const v = e.target.value.trim();
-            if (v && v !== candidate.title) onPatch({ title: v });
-          }}
-          className="w-full rounded-lg bg-surface-muted px-4 py-3 text-lg font-semibold outline-none transition-shadow placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-brand-300"
-        />
-      </div>
-
       {processing ? (
         <div className="flex items-center gap-3 rounded-lg bg-surface-muted px-4 py-6 text-sm text-muted-foreground">
           <Spinner className="h-4 w-4" />
@@ -293,6 +302,154 @@ function AttachedBody({
           ) : null}
         </>
       )}
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="title">Video Title</TabsTrigger>
+          <TabsTrigger value="number">Number Appearance</TabsTrigger>
+        </TabsList>
+        <TabsContent value="title" className="pt-4">
+          <VideoTitleTab
+            candidate={candidate}
+            onPatch={onPatch}
+            onPatchDebounced={onPatchDebounced}
+          />
+        </TabsContent>
+        <TabsContent value="number" className="pt-4">
+          <NumberAppearanceTab
+            candidate={candidate}
+            brandColor={brandColor}
+            onPatchDebounced={onPatchDebounced}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+/** "Video Title" tab: text + the same style controls as the ranking title. */
+function VideoTitleTab({
+  candidate,
+  onPatch,
+  onPatchDebounced,
+}: {
+  candidate: RankingCandidateDetail;
+  onPatch: (patch: RankingCandidatePatch) => void;
+  onPatchDebounced: (patch: RankingCandidatePatch) => void;
+}) {
+  const titleId = useId();
+  const { titleStyle } = candidateStyles(candidate.metadataJson);
+
+  function patchStyle(next: RankingTitleStyle) {
+    onPatchDebounced({
+      metadataJson: { ...candidate.metadataJson, titleStyle: next },
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      <TitleStyleToolbar value={titleStyle} onChange={patchStyle} idBase={titleId} />
+      <input
+        id={titleId}
+        type="text"
+        defaultValue={candidate.title}
+        key={candidate.title /* refresh after auto-fill */}
+        maxLength={200}
+        placeholder="Enter video title..."
+        aria-label="Video title"
+        onBlur={(e) => {
+          const v = e.target.value.trim();
+          if (v && v !== candidate.title) onPatch({ title: v });
+        }}
+        className="w-full rounded-lg bg-surface-muted px-4 py-3 text-lg font-semibold outline-none transition-shadow placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-brand-300"
+      />
+      <TitleStrokeRow value={titleStyle} onChange={patchStyle} idBase={`${titleId}-stroke`} />
+    </div>
+  );
+}
+
+/** "Number Appearance" tab: rank badge visibility, color, size, position. */
+function NumberAppearanceTab({
+  candidate,
+  brandColor,
+  onPatchDebounced,
+}: {
+  candidate: RankingCandidateDetail;
+  brandColor: string;
+  onPatchDebounced: (patch: RankingCandidatePatch) => void;
+}) {
+  const idBase = useId();
+  const { numberStyle } = candidateStyles(candidate.metadataJson);
+
+  function patchNumber(next: Partial<NumberStyle>) {
+    onPatchDebounced({
+      metadataJson: {
+        ...candidate.metadataJson,
+        numberStyle: { ...numberStyle, ...next },
+      },
+    });
+  }
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="flex items-center justify-between gap-3 sm:col-span-2">
+        <label htmlFor={`${idBase}-visible`} className="text-sm font-medium">
+          Show rank number
+        </label>
+        <Switch
+          id={`${idBase}-visible`}
+          checked={numberStyle.visible}
+          onCheckedChange={(v) => patchNumber({ visible: v })}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <label htmlFor={`${idBase}-color`} className="text-xs font-medium text-muted-foreground">
+          Number color
+        </label>
+        <ColorPicker
+          id={`${idBase}-color`}
+          aria-label="Number color"
+          value={numberStyle.color ?? brandColor}
+          onChange={(hex) => patchNumber({ color: hex })}
+        />
+      </div>
+      <div className="space-y-1.5">
+        <label htmlFor={`${idBase}-size`} className="text-xs font-medium text-muted-foreground">
+          Number size
+        </label>
+        <Select
+          id={`${idBase}-size`}
+          aria-label="Number size"
+          value={String(numberStyle.fontSize)}
+          onChange={(e) => patchNumber({ fontSize: Number(e.target.value) })}
+        >
+          {NUMBER_SIZE_OPTIONS.map((o) => (
+            <option key={o.value} value={String(o.value)}>
+              {o.label}
+            </option>
+          ))}
+          {NUMBER_SIZE_OPTIONS.every((o) => o.value !== numberStyle.fontSize) ? (
+            <option value={String(numberStyle.fontSize)}>{numberStyle.fontSize}px</option>
+          ) : null}
+        </Select>
+      </div>
+      <div className="space-y-1.5 sm:col-span-2">
+        <label htmlFor={`${idBase}-pos`} className="text-xs font-medium text-muted-foreground">
+          Position
+        </label>
+        <Select
+          id={`${idBase}-pos`}
+          aria-label="Number position"
+          value={numberStyle.position}
+          onChange={(e) =>
+            patchNumber({ position: e.target.value as NumberStyle['position'] })
+          }
+        >
+          <option value="left">Top left</option>
+          <option value="center">Top center</option>
+          <option value="right">Top right</option>
+        </Select>
+      </div>
     </div>
   );
 }
