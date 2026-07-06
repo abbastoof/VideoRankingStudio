@@ -7,10 +7,13 @@ import { requireAuth } from '../middleware/auth';
 const idParams = z.object({ id: z.string() });
 
 // `z.coerce.boolean()` turns the string "false" into true — parse explicitly.
+// Accepts booleans as well: fastify's zod provider stores the TRANSFORMED
+// value back on req.query, and the handler re-parses the same schema — a
+// string-only enum would reject its own output on that second pass.
 const queryBool = z
-  .enum(['true', 'false', '1', '0'])
+  .union([z.boolean(), z.enum(['true', 'false', '1', '0'])])
   .optional()
-  .transform((v) => v === 'true' || v === '1');
+  .transform((v) => v === true || v === 'true' || v === '1');
 
 const listQuerySchema = z.object({
   cursor: z.string().optional(),
