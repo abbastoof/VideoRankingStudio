@@ -150,6 +150,24 @@ export function RankingPreview({
     v.volume = Math.min(1, Math.max(0, active?.candidate.volume ?? 1));
   }, [muted, safeIndex, active?.candidate.volume]);
 
+  // Narration playback: the slot's voiceover plays alongside the video,
+  // exactly as the export mixes it onto the AUDIO track.
+  const narrationRef = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    const a = narrationRef.current;
+    if (!a) return;
+    a.muted = muted;
+    if (playing && active?.candidate.voiceoverUrl) {
+      // Seek only on drift so pause/resume doesn't stutter the narration.
+      const target = Math.max(0, slotElapsedMs / 1000);
+      if (Math.abs(a.currentTime - target) > 0.4) a.currentTime = target;
+      void a.play().catch(() => undefined);
+    } else {
+      a.pause();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- slotElapsedMs only seeds drift correction; re-running per tick would fight playback
+  }, [playing, muted, safeIndex, active?.candidate.voiceoverUrl]);
+
   // Measure the frame so the design canvas can scale to fit.
   const frameRef = useRef<HTMLDivElement>(null);
   const [frameWidth, setFrameWidth] = useState(0);
@@ -340,6 +358,18 @@ export function RankingPreview({
                   ) : null}
                 </span>
               </div>
+            ) : null}
+
+            {/* Slot narration (hidden element; plays in sync with the video) */}
+            {active?.candidate.voiceoverUrl ? (
+              // eslint-disable-next-line jsx-a11y/media-has-caption -- synced narration preview
+              <audio
+                ref={narrationRef}
+                key={`vo-${active.candidate.id}`}
+                src={active.candidate.voiceoverUrl}
+                preload="auto"
+                className="hidden"
+              />
             ) : null}
 
             {/* Empty state */}

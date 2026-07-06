@@ -44,6 +44,7 @@ import type {
   UploadInitResponse,
   UsageSummary,
   UserProfile,
+  Voice,
 } from '@vrs/types';
 
 type CompleteUploadInput = { assetId: string; sha256?: string };
@@ -125,11 +126,17 @@ export interface RankingCandidateDetail {
   trimStartMs: number | null;
   trimEndMs: number | null;
   volume: number;
+  voiceoverId: string | null;
   metadataJson?: Record<string, unknown>;
   assetStatus: string | null;
   assetDurationMs: number | null;
   assetUrl: string | null;
   thumbnailUrl: string | null;
+  voiceoverStatus: string | null;
+  voiceoverDurationMs: number | null;
+  voiceoverScript: string | null;
+  voiceoverVoiceId: string | null;
+  voiceoverUrl: string | null;
 }
 
 export interface RankingDetail {
@@ -172,6 +179,7 @@ export interface RankingCandidatePatch {
   trimStartMs?: number | null;
   trimEndMs?: number | null;
   volume?: number;
+  voiceoverId?: string | null;
   metadataJson?: Record<string, unknown>;
 }
 
@@ -302,6 +310,9 @@ export class VrsClient {
   }
   generateVoiceover(id: string, body: GenerateVoiceover) {
     return this.request<{ voiceoverId: string; jobId: string }>('POST', `/v1/projects/${id}/generate/voice`, { body });
+  }
+  listVoices(query?: { kind?: 'STOCK' | 'CLONED'; language?: string }) {
+    return this.request<Page<Voice>>('GET', '/v1/voices', { query });
   }
   generateScript(id: string, body: GenerateScript) {
     return this.request<EnqueueJobResponse>('POST', `/v1/projects/${id}/generate/script`, { body });

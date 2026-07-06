@@ -35,6 +35,7 @@ export function useRankingBuilder(initial: RankingDetail) {
   const [ranking, setRanking] = useState<RankingDetail>(initial);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [imports, setImports] = useState<Record<string, ImportState>>({});
+  const [voiceovers, setVoiceovers] = useState<Record<string, ImportState>>({});
 
   // Always-current mirror so callbacks can read the latest state without
   // doing work inside setState updaters (which must stay pure).
@@ -337,6 +338,56 @@ export function useRankingBuilder(initial: RankingDetail) {
     [initial.projectId, refresh, toast, track],
   );
 
+  /** Generate narration for a candidate: TTS job → attach + refresh. */
+  const generateVoiceover = useCallback(
+    async (candidateId: string, input: { voiceId: string; scriptText: string }) => {
+      setVoiceovers((m) => ({ ...m, [candidateId]: { status: 'importing' } }));
+      try {
+        const sdk = clientSdk();
+        const { voiceoverId, jobId } = await sdk.generateVoiceover(initial.projectId, {
+          voiceId: input.voiceId,
+          scriptText: input.scriptText,
+          speed: 1,
+          pitch: 0,
+        });
+
+        const deadline = Date.now() + 3 * 60_000;
+        for (;;) {
+          if (Date.now() > deadline) throw new Error('Voiceover timed out');
+          const job = await sdk.getJob(jobId);
+          if (job.status === 'SUCCEEDED') break;
+          if (job.status === 'FAILED' || job.status === 'CANCELED') {
+            throw new Error(job.errorMessage ?? 'Voiceover generation failed');
+          }
+          await sleep(1200);
+        }
+
+        await track(() =>
+          clientSdk().updateRankingCandidate(initial.projectId, candidateId, { voiceoverId }),
+        );
+        await refresh();
+        setVoiceovers((m) => ({ ...m, [candidateId]: { status: 'idle' } }));
+        toast({ tone: 'success', title: 'Voiceover ready' });
+      } catch (err) {
+        setVoiceovers((m) => ({
+          ...m,
+          [candidateId]: {
+            status: 'error',
+            error: err instanceof Error ? err.message : 'Voiceover generation failed',
+          },
+        }));
+      }
+    },
+    [initial.projectId, refresh, toast, track],
+  );
+
+  const removeVoiceover = useCallback(
+    (candidateId: string) => {
+      patchCandidate(candidateId, { voiceoverId: null });
+    },
+    [patchCandidate],
+  );
+
   /** Upload a local file into a candidate via the presigned flow. */
   const uploadFile = useCallback(
     async (candidateId: string, file: File) => {
@@ -382,6 +433,7 @@ export function useRankingBuilder(initial: RankingDetail) {
     ranking,
     saveState,
     imports,
+    voiceovers,
     patchMeta,
     patchCandidate,
     patchCandidateDebounced,
@@ -391,6 +443,8 @@ export function useRankingBuilder(initial: RankingDetail) {
     reorderTo,
     importFromUrl,
     uploadFile,
+    generateVoiceover,
+    removeVoiceover,
     refresh,
     flush,
   };

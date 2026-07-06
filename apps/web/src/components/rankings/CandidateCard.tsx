@@ -1,10 +1,12 @@
 'use client';
 
-import { ArrowDown, ArrowRight, ArrowUp, Instagram, Trash2, Youtube } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowDown, ArrowRight, ArrowUp, Instagram, Mic2, Trash2, Youtube } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 
 import type { RankingCandidateDetail, RankingCandidatePatch, RankingTitleStyle } from '@vrs/sdk';
 import {
+  Button,
   Card,
   CardContent,
   cn,
@@ -20,8 +22,11 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Textarea,
   useConfirm,
 } from '@vrs/ui';
+
+import { clientSdk } from '@/lib/client-sdk';
 
 import type { ImportState } from './useRankingBuilder';
 import {
@@ -40,6 +45,7 @@ export interface CandidateCardProps {
   index: number;
   count: number;
   importState: ImportState | undefined;
+  voiceoverState: ImportState | undefined;
   /** Accent color of the ranking — the number's default color. */
   brandColor: string;
   onPatch: (patch: RankingCandidatePatch) => void;
@@ -47,6 +53,8 @@ export interface CandidateCardProps {
   onPatchDebounced: (patch: RankingCandidatePatch) => void;
   onImportUrl: (url: string) => void;
   onUploadFile: (file: File) => void;
+  onGenerateVoiceover: (input: { voiceId: string; scriptText: string }) => void;
+  onRemoveVoiceover: () => void;
   onMove: (dir: 'up' | 'down') => void;
   onRemove: () => void;
 }
@@ -60,11 +68,14 @@ export function CandidateCard({
   index,
   count,
   importState,
+  voiceoverState,
   brandColor,
   onPatch,
   onPatchDebounced,
   onImportUrl,
   onUploadFile,
+  onGenerateVoiceover,
+  onRemoveVoiceover,
   onMove,
   onRemove,
 }: CandidateCardProps) {
@@ -117,8 +128,11 @@ export function CandidateCard({
               <AttachedBody
                 candidate={candidate}
                 brandColor={brandColor}
+                voiceoverState={voiceoverState}
                 onPatch={onPatch}
                 onPatchDebounced={onPatchDebounced}
+                onGenerateVoiceover={onGenerateVoiceover}
+                onRemoveVoiceover={onRemoveVoiceover}
               />
             ) : (
               <EmptyBody
@@ -253,13 +267,19 @@ function EmptyBody({
 function AttachedBody({
   candidate,
   brandColor,
+  voiceoverState,
   onPatch,
   onPatchDebounced,
+  onGenerateVoiceover,
+  onRemoveVoiceover,
 }: {
   candidate: RankingCandidateDetail;
   brandColor: string;
+  voiceoverState: ImportState | undefined;
   onPatch: (patch: RankingCandidatePatch) => void;
   onPatchDebounced: (patch: RankingCandidatePatch) => void;
+  onGenerateVoiceover: (input: { voiceId: string; scriptText: string }) => void;
+  onRemoveVoiceover: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const processing = candidate.assetStatus !== 'READY' && candidate.assetStatus !== 'UPLOADED';
@@ -308,6 +328,7 @@ function AttachedBody({
         <TabsList>
           <TabsTrigger value="title">Video Title</TabsTrigger>
           <TabsTrigger value="number">Number Appearance</TabsTrigger>
+          <TabsTrigger value="voiceover">Voiceover</TabsTrigger>
           <TabsTrigger value="animation">Animation &amp; Transition</TabsTrigger>
         </TabsList>
         <TabsContent value="title" className="pt-4">
@@ -322,6 +343,14 @@ function AttachedBody({
             candidate={candidate}
             brandColor={brandColor}
             onPatchDebounced={onPatchDebounced}
+          />
+        </TabsContent>
+        <TabsContent value="voiceover" className="pt-4">
+          <VoiceoverTab
+            candidate={candidate}
+            state={voiceoverState}
+            onGenerate={onGenerateVoiceover}
+            onRemove={onRemoveVoiceover}
           />
         </TabsContent>
         <TabsContent value="animation" className="pt-4">
@@ -369,6 +398,115 @@ function VideoTitleTab({
         className="w-full rounded-lg bg-surface-muted px-4 py-3 text-lg font-semibold outline-none transition-shadow placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-brand-300"
       />
       <TitleStrokeRow value={titleStyle} onChange={patchStyle} idBase={`${titleId}-stroke`} />
+    </div>
+  );
+}
+
+/** "Voiceover" tab: pick a voice, narrate the slot, preview the audio. */
+function VoiceoverTab({
+  candidate,
+  state,
+  onGenerate,
+  onRemove,
+}: {
+  candidate: RankingCandidateDetail;
+  state: ImportState | undefined;
+  onGenerate: (input: { voiceId: string; scriptText: string }) => void;
+  onRemove: () => void;
+}) {
+  const idBase = useId();
+  const voicesQuery = useQuery({
+    queryKey: ['voices'],
+    queryFn: () => clientSdk().listVoices(),
+    staleTime: 5 * 60_000,
+  });
+  const voices = voicesQuery.data?.items ?? [];
+  const readyVoices = voices.filter((v) => v.status === 'READY');
+
+  const [voiceId, setVoiceId] = useState<string>(candidate.voiceoverVoiceId ?? '');
+  const [script, setScript] = useState<string>(candidate.voiceoverScript ?? candidate.title);
+  const generating = state?.status === 'importing';
+  const selectedVoice = voiceId || readyVoices[0]?.id || '';
+  const hasVoiceover = Boolean(candidate.voiceoverUrl);
+
+  return (
+    <div className="space-y-3">
+      {hasVoiceover ? (
+        <div className="space-y-2 rounded-lg bg-surface-muted p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Mic2 className="h-3.5 w-3.5" aria-hidden />
+              Narration for this video
+              {candidate.voiceoverDurationMs ? (
+                <span className="font-mono">
+                  · {(candidate.voiceoverDurationMs / 1000).toFixed(1)}s
+                </span>
+              ) : null}
+            </span>
+            <Button variant="ghost" size="xs" onClick={onRemove}>
+              Remove
+            </Button>
+          </div>
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption -- generated narration; script shown below */}
+          <audio controls preload="metadata" src={candidate.voiceoverUrl!} className="w-full" />
+        </div>
+      ) : null}
+
+      <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
+        <div className="space-y-1.5">
+          <label htmlFor={`${idBase}-voice`} className="text-xs font-medium text-muted-foreground">
+            Voice
+          </label>
+          <Select
+            id={`${idBase}-voice`}
+            aria-label="Voice"
+            value={selectedVoice}
+            onChange={(e) => setVoiceId(e.target.value)}
+            disabled={voicesQuery.isLoading || readyVoices.length === 0}
+          >
+            {readyVoices.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+                {v.provider === 'INTERNAL' ? ' — free' : ''}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor={`${idBase}-script`} className="text-xs font-medium text-muted-foreground">
+            Script
+          </label>
+          <Textarea
+            id={`${idBase}-script`}
+            value={script}
+            onChange={(e) => setScript(e.target.value)}
+            rows={3}
+            maxLength={2000}
+            placeholder="What should the narrator say during this video?"
+          />
+        </div>
+      </div>
+
+      {state?.status === 'error' ? (
+        <p role="alert" className="text-sm text-danger">
+          {state.error}
+        </p>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          Narration is mixed over the video for this slot in the final export.
+        </p>
+        <Button
+          size="sm"
+          loading={generating}
+          disabled={!selectedVoice || !script.trim()}
+          leftIcon={<Mic2 className="h-4 w-4" />}
+          onClick={() => onGenerate({ voiceId: selectedVoice, scriptText: script.trim() })}
+        >
+          {hasVoiceover ? 'Regenerate' : 'Generate Voiceover'}
+        </Button>
+      </div>
     </div>
   );
 }

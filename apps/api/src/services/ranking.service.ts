@@ -36,6 +36,8 @@ export interface RankingCandidate {
   trimStartMs?: number | null;
   trimEndMs?: number | null;
   volume?: number;
+  /** Narration generated from the card's Voiceover tab. */
+  voiceoverId?: string | null;
   metadataJson?: Record<string, unknown>;
 }
 
@@ -207,6 +209,26 @@ export async function getRanking(userId: string, projectId: string) {
     : [];
   const assetById = new Map(assets.map((a) => [a.id, a]));
 
+  // Same for narration: status + a playable URL per candidate voiceover.
+  const voiceoverIds = ordered
+    .map((c) => c.voiceoverId)
+    .filter((x): x is string => Boolean(x));
+  const voiceovers = voiceoverIds.length
+    ? await prisma.voiceover.findMany({
+        where: { id: { in: voiceoverIds }, projectId },
+        select: {
+          id: true,
+          status: true,
+          audioBucket: true,
+          audioKey: true,
+          durationMs: true,
+          scriptText: true,
+          voiceId: true,
+        },
+      })
+    : [];
+  const voiceoverById = new Map(voiceovers.map((v) => [v.id, v]));
+
   const enriched = await Promise.all(
     ordered.map(async (c) => {
       const asset = c.assetId ? assetById.get(c.assetId) : undefined;
@@ -218,15 +240,29 @@ export async function getRanking(userId: string, projectId: string) {
         });
       }
       const thumbKey = c.thumbnailKey ?? asset?.thumbnailKey ?? null;
+      const vo = c.voiceoverId ? voiceoverById.get(c.voiceoverId) : undefined;
+      let voiceoverUrl: string | null = null;
+      if (vo && vo.status === 'COMPLETED' && vo.audioKey) {
+        voiceoverUrl = await presignGet({
+          bucket: (vo.audioBucket ?? 'generated') as 'uploads' | 'generated' | 'exports' | 'public',
+          key: vo.audioKey,
+        });
+      }
       return {
         ...c,
         trimStartMs: c.trimStartMs ?? null,
         trimEndMs: c.trimEndMs ?? null,
         volume: c.volume ?? 1,
+        voiceoverId: c.voiceoverId ?? null,
         assetStatus: asset?.status ?? null,
         assetDurationMs: asset?.durationMs ?? null,
         assetUrl,
         thumbnailUrl: thumbKey ? await presignGet({ bucket: 'public', key: thumbKey }) : null,
+        voiceoverStatus: vo?.status ?? null,
+        voiceoverDurationMs: vo?.durationMs ?? null,
+        voiceoverScript: vo?.scriptText ?? null,
+        voiceoverVoiceId: vo?.voiceId ?? null,
+        voiceoverUrl,
       };
     }),
   );
@@ -266,6 +302,7 @@ export async function addCandidate(
       trimStartMs: input.trimStartMs ?? null,
       trimEndMs: input.trimEndMs ?? null,
       volume: input.volume ?? 1,
+      voiceoverId: input.voiceoverId ?? null,
       metadataJson: input.metadataJson ?? {},
     };
     settings.candidates = [...settings.candidates, next];
@@ -388,6 +425,18 @@ export async function bakeTimeline(userId: string, projectId: string) {
     : [];
   const assetById = new Map(assets.map((a) => [a.id, a]));
 
+  // Completed narration per candidate lands on the AUDIO track.
+  const voiceoverIds = revealed
+    .map((c) => c.voiceoverId)
+    .filter((id): id is string => Boolean(id));
+  const voiceovers = voiceoverIds.length
+    ? await prisma.voiceover.findMany({
+        where: { id: { in: voiceoverIds }, projectId, status: 'COMPLETED' },
+        select: { id: true, durationMs: true },
+      })
+    : [];
+  const voiceoverById = new Map(voiceovers.map((v) => [v.id, v]));
+
   // Pre-compute slot windows: trimmed range, else full clip, else default.
   const slots = revealed.map((c) => ({
     candidate: c,
@@ -407,11 +456,12 @@ export async function bakeTimeline(userId: string, projectId: string) {
     }
     const videoTrack = await ensureTrack('VIDEO');
     const overlayTrack = await ensureTrack('OVERLAY');
+    const audioTrack = await ensureTrack('AUDIO');
     await ensureTrack('CAPTION');
 
     // Clear old clips on the tracks we own.
     await tx.clip.deleteMany({
-      where: { trackId: { in: [videoTrack.id, overlayTrack.id] } },
+      where: { trackId: { in: [videoTrack.id, overlayTrack.id, audioTrack.id] } },
     });
 
     const clips: Prisma.ClipCreateManyInput[] = [];
@@ -468,6 +518,23 @@ export async function bakeTimeline(userId: string, projectId: string) {
             ? { effectsJson: videoFade as unknown as Prisma.InputJsonValue }
             : {}),
           metadataJson: { role: 'ranking:card', candidateId: c.id } as Prisma.InputJsonValue,
+        });
+      }
+
+      // Narration for this slot (clipped to the slot window).
+      const vo = c.voiceoverId ? voiceoverById.get(c.voiceoverId) : undefined;
+      if (vo) {
+        const voDuration = Math.min(vo.durationMs ?? durationMs, durationMs);
+        clips.push({
+          trackId: audioTrack.id,
+          source: 'VOICEOVER',
+          voiceoverId: vo.id,
+          startMs: start,
+          durationMs: voDuration,
+          inMs: 0,
+          outMs: voDuration,
+          volume: 1,
+          metadataJson: { role: 'ranking:voiceover', candidateId: c.id } as Prisma.InputJsonValue,
         });
       }
 

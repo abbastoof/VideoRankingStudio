@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -29,7 +30,11 @@ def generate_thumbnail(
     with job_lifecycle(job_id, "thumbnail") as report:
         with download_tempfile(asset_bucket, asset_key, suffix=Path(asset_key).suffix) as src:  # type: ignore[arg-type]
             report(0.3, "extracting frame")
-            dest = Path(tempfile.mkstemp(suffix=".jpg")[1])
+            # mkstemp returns an OPEN fd — close it or Windows keeps the file
+            # locked against ffmpeg's overwrite and our unlink.
+            fd, dest_name = tempfile.mkstemp(suffix=".jpg")
+            os.close(fd)
+            dest = Path(dest_name)
             subprocess.run(
                 [
                     "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",

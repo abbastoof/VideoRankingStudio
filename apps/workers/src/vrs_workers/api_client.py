@@ -80,6 +80,39 @@ def asset_done(
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
+def voiceover_done(
+    voiceover_id: str,
+    *,
+    audio_bucket: str,
+    audio_key: str,
+    duration_ms: int | None,
+    characters_used: int,
+) -> None:
+    """Mark a Voiceover COMPLETED with its audio location.
+
+    Without this call the row stays RUNNING forever and the audio can never
+    be placed on a timeline.
+    """
+    res = _client.post(
+        f"/v1/internal/voiceovers/{voiceover_id}/done",
+        json={
+            "audioBucket": audio_bucket,
+            "audioKey": audio_key,
+            "durationMs": duration_ms,
+            "charactersUsed": characters_used,
+        },
+    )
+    if res.status_code >= 400:
+        logger.error(
+            "api.voiceover_done_failed",
+            voiceover_id=voiceover_id,
+            status=res.status_code,
+            body=res.text,
+        )
+        res.raise_for_status()
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
 def asset_thumbnail(asset_id: str, *, key: str) -> None:
     """Record a generated poster frame on the Asset (public bucket key)."""
     res = _client.post(f"/v1/internal/assets/{asset_id}/thumbnail", json={"key": key})

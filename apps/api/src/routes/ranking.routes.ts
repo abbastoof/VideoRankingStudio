@@ -17,6 +17,7 @@ const candidateSchema = z.object({
   trimStartMs: z.number().int().nonnegative().nullable().optional(),
   trimEndMs: z.number().int().positive().nullable().optional(),
   volume: z.number().min(0).max(2).optional(),
+  voiceoverId: z.string().nullable().optional(),
   metadataJson: z.record(z.unknown()).optional(),
 });
 

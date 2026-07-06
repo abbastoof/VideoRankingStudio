@@ -151,6 +151,16 @@ async function seedVoices(): Promise<void> {
   // without changing these rows.
   const voices = [
     {
+      providerVoiceId: 'default',
+      name: 'Basic (free)',
+      description:
+        'Offline synthetic voice with no per-character cost. Great for drafts and timing.',
+      provider: VoiceProvider.INTERNAL,
+      language: 'en-US',
+      gender: 'neutral',
+      ageGroup: 'adult',
+    },
+    {
       providerVoiceId: 'stock-narrator-male-us',
       name: 'Atlas',
       description: 'Confident US male narrator. Good for explainers.',

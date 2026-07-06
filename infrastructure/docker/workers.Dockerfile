@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates \
       libgomp1 \
       fontconfig \
+      espeak-ng \
    && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build

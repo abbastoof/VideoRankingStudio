@@ -108,11 +108,14 @@ export function RankingBuilder({ initial }: { initial: RankingDetail }) {
               index={i}
               count={ranking.candidates.length}
               importState={imports[candidate.id]}
+              voiceoverState={builder.voiceovers[candidate.id]}
               brandColor={ranking.brandColor ?? '#f97316'}
               onPatch={(patch) => builder.patchCandidate(candidate.id, patch)}
               onPatchDebounced={(patch) => builder.patchCandidateDebounced(candidate.id, patch)}
               onImportUrl={(url) => void builder.importFromUrl(candidate.id, url)}
               onUploadFile={(file) => void builder.uploadFile(candidate.id, file)}
+              onGenerateVoiceover={(input) => void builder.generateVoiceover(candidate.id, input)}
+              onRemoveVoiceover={() => builder.removeVoiceover(candidate.id)}
               onMove={(dir) => builder.moveCandidate(candidate.id, dir)}
               onRemove={() => void builder.removeCandidate(candidate.id)}
             />
