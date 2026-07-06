@@ -189,6 +189,17 @@ export function PlaybackOrderCard({ ranking, patchMeta }: CardProps) {
               Drag or use the arrows on each card — #1 plays according to the reveal.
             </p>
           )}
+          <div className="space-y-1.5">
+            <span className="block text-xs font-medium text-muted-foreground">Transition</span>
+            <Select
+              aria-label="Transition between videos"
+              value={ranking.transition}
+              onChange={(e) => patchMeta({ transition: e.target.value as 'none' | 'fade' })}
+            >
+              <option value="fade">Crossfade</option>
+              <option value="none">Hard cut</option>
+            </Select>
+          </div>
         </div>
       </CardContent>
     </Card>

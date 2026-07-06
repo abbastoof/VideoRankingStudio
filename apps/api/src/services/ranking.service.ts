@@ -57,6 +57,8 @@ interface RankingSettings {
   candidates: RankingCandidate[];
   order: 'asc' | 'desc';
   orderMode: 'score' | 'custom';
+  /** Slot-boundary treatment: dip-through-background crossfade or hard cut. */
+  transition?: 'none' | 'fade';
   headerText?: string;
   brandColor?: string;
   reveal?: 'countdown' | 'topfirst';
@@ -88,6 +90,7 @@ function readSettings(project: { settingsJson: unknown }): RankingSettings {
     candidates: Array.isArray(raw.candidates) ? raw.candidates : [],
     order: raw.order === 'asc' ? 'asc' : 'desc',
     orderMode: raw.orderMode === 'custom' ? 'custom' : 'score',
+    transition: raw.transition === 'none' ? 'none' : 'fade',
     headerText: raw.headerText,
     brandColor: raw.brandColor,
     reveal: raw.reveal ?? 'countdown',
@@ -234,6 +237,7 @@ export async function getRanking(userId: string, projectId: string) {
     aspectRatio: p.aspectRatio,
     order: settings.order,
     orderMode: settings.orderMode,
+    transition: settings.transition ?? 'fade',
     headerText: settings.headerText ?? null,
     brandColor: settings.brandColor ?? null,
     reveal: settings.reveal ?? 'countdown',
@@ -316,6 +320,7 @@ export async function updateRankingMeta(
   patch: {
     order?: 'asc' | 'desc';
     orderMode?: 'score' | 'custom';
+    transition?: 'none' | 'fade';
     headerText?: string | null;
     brandColor?: string | null;
     reveal?: 'countdown' | 'topfirst';
@@ -328,6 +333,7 @@ export async function updateRankingMeta(
   await mutateSettings(userId, projectId, (settings) => {
     if (patch.order) settings.order = patch.order;
     if (patch.orderMode) settings.orderMode = patch.orderMode;
+    if (patch.transition) settings.transition = patch.transition;
     if (patch.headerText !== undefined) settings.headerText = patch.headerText ?? undefined;
     if (patch.brandColor !== undefined) settings.brandColor = patch.brandColor ?? undefined;
     if (patch.reveal) settings.reveal = patch.reveal;
@@ -365,6 +371,11 @@ export async function bakeTimeline(userId: string, projectId: string) {
   const videoTopPct = (100 - heightPct) / 2;
   const titleStyle = settings.titleStyle ?? {};
   const brand = settings.brandColor ?? '#f97316';
+  const fadeTransition = (settings.transition ?? 'fade') === 'fade';
+  // Dip-through-background at slot boundaries; text exits slightly faster so
+  // it never lingers over the next slot's first frame.
+  const videoFade = [{ type: 'fade', params: { inMs: 300, outMs: 300 } }] as const;
+  const textFade = [{ type: 'fade', params: { inMs: 0, outMs: 250 } }] as const;
 
   // Resolve every referenced asset up front — slot lengths depend on clip
   // durations, and one findMany beats a query per candidate inside the tx.
@@ -453,6 +464,9 @@ export async function bakeTimeline(userId: string, projectId: string) {
           outMs: inMs + durationMs,
           volume: c.volume ?? 1,
           transformJson: { scale: heightPct / 100 } as Prisma.InputJsonValue,
+          ...(fadeTransition
+            ? { effectsJson: videoFade as unknown as Prisma.InputJsonValue }
+            : {}),
           metadataJson: { role: 'ranking:card', candidateId: c.id } as Prisma.InputJsonValue,
         });
       }
@@ -478,7 +492,7 @@ export async function bakeTimeline(userId: string, projectId: string) {
             color: styles.number.color ?? brand,
             background: null,
             align: 'left',
-            animation: 'pop',
+            animation: styles.animation ?? 'pop',
             strokeColor: '#000000',
             strokeWidth: 10,
             xPct: styles.number.xPct,
@@ -486,6 +500,9 @@ export async function bakeTimeline(userId: string, projectId: string) {
             // Mirrors computeLayout in apps/web ranking-layout.ts.
             yPct: videoTopPct + 4.5,
           } as Prisma.InputJsonValue,
+          ...(fadeTransition
+            ? { effectsJson: textFade as unknown as Prisma.InputJsonValue }
+            : {}),
           metadataJson: {
             role: 'ranking:number',
             candidateId: c.id,
@@ -512,7 +529,7 @@ export async function bakeTimeline(userId: string, projectId: string) {
           color: styles.title.color,
           background: styles.title.background,
           align: 'center',
-          animation: 'fade-in',
+          animation: styles.animation ?? 'fade-in',
           strokeColor: styles.title.strokeColor,
           strokeWidth: styles.title.strokeWidth,
           xPct: null,
@@ -520,6 +537,9 @@ export async function bakeTimeline(userId: string, projectId: string) {
           // Mirrors computeLayout in apps/web ranking-layout.ts.
           yPct: Math.max(videoTopPct - 2, 11),
         } as Prisma.InputJsonValue,
+        ...(fadeTransition
+          ? { effectsJson: textFade as unknown as Prisma.InputJsonValue }
+          : {}),
         metadataJson: {
           role: 'ranking:overlay',
           candidateId: c.id,
@@ -560,6 +580,8 @@ function candidateOverlayStyles(metadataJson: Record<string, unknown> | undefine
     strokeWidth: number;
   };
   number: { visible: boolean; color: string | null; fontSize: number; xPct: number };
+  /** Entrance animation for both overlay clips; null = per-clip defaults. */
+  animation: 'none' | 'fade-in' | 'pop' | null;
 } {
   const raw = metadataJson ?? {};
   const t = (typeof raw.titleStyle === 'object' && raw.titleStyle !== null
@@ -569,7 +591,12 @@ function candidateOverlayStyles(metadataJson: Record<string, unknown> | undefine
     ? raw.numberStyle
     : {}) as Record<string, unknown>;
   const position = n.position === 'center' ? 50 : n.position === 'right' ? 84 : 16;
+  const animation =
+    raw.animation === 'none' || raw.animation === 'fade-in' || raw.animation === 'pop'
+      ? raw.animation
+      : null;
   return {
+    animation,
     title: {
       fontFamily: typeof t.fontFamily === 'string' ? t.fontFamily : 'Rubik',
       fontSize: typeof t.fontSize === 'number' ? t.fontSize : 44,

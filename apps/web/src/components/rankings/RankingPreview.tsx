@@ -169,6 +169,20 @@ export function RankingPreview({
   const brand = ranking.brandColor ?? '#f97316';
   const activeStyles = candidateStyles(active?.candidate.metadataJson);
 
+  // Entrance classes mirror the export: title defaults to fade, number to
+  // pop; the per-candidate Animation tab overrides both. Keyed wrappers
+  // remount per slot so the animation replays.
+  const entranceClass = (a: 'none' | 'fade-in' | 'pop') =>
+    a === 'pop'
+      ? 'animate-pop-in motion-reduce:animate-none'
+      : a === 'fade-in'
+        ? 'animate-fade-in-slow motion-reduce:animate-none'
+        : '';
+  const numberEntrance = entranceClass(activeStyles.animation ?? 'pop');
+  const titleEntrance = entranceClass(activeStyles.animation ?? 'fade-in');
+  const videoEntrance =
+    ranking.transition === 'fade' ? 'animate-fade-in-slow motion-reduce:animate-none' : '';
+
   return (
     <div className="space-y-3">
       <div
@@ -190,7 +204,11 @@ export function RankingPreview({
             {/* Video block */}
             {active?.candidate.assetUrl ? (
               <div
-                className="absolute left-0 flex w-full items-center justify-center"
+                key={`v-${active.candidate.id}`}
+                className={cn(
+                  'absolute left-0 flex w-full items-center justify-center',
+                  videoEntrance,
+                )}
                 style={{
                   top: `${layout.videoTopPct}%`,
                   height: `${layout.videoHeightPct}%`,
@@ -226,7 +244,9 @@ export function RankingPreview({
                 }}
                 aria-hidden
               >
-                {active.rank}.
+                <span key={`n-${active.candidate.id}`} className={cn('inline-block', numberEntrance)}>
+                  {active.rank}.
+                </span>
               </div>
             ) : null}
 
@@ -295,10 +315,11 @@ export function RankingPreview({
                 aria-hidden
               >
                 <span
+                  key={`t-${active.candidate.id}`}
+                  className={cn('inline-block', titleEntrance)}
                   style={
                     activeStyles.titleStyle.background
                       ? {
-                          display: 'inline-block',
                           backgroundColor: activeStyles.titleStyle.background,
                           borderRadius: '0.25em',
                           padding: '0.35em',

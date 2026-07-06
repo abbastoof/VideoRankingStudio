@@ -38,6 +38,7 @@ const titleStyleSchema = z.object({
 const metaSchema = z.object({
   order: z.enum(['asc', 'desc']).optional(),
   orderMode: z.enum(['score', 'custom']).optional(),
+  transition: z.enum(['none', 'fade']).optional(),
   headerText: z.string().max(200).nullable().optional(),
   brandColor: z.string().max(32).nullable().optional(),
   reveal: z.enum(['countdown', 'topfirst']).optional(),

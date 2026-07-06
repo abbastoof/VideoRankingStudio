@@ -206,3 +206,87 @@ def test_transform_scale_letterboxes_and_centers(spec: ComposeSpec, tmp_path: Pa
     # 80% of 1920 = 1536 box height, fit inside (not cover+crop).
     assert "scale=1080:1536:force_original_aspect_ratio=decrease" in graph
     assert "overlay=x=(W-w)/2+0.0:y=(H-h)/2+0.0" in graph
+
+
+def test_fade_effect_renders_alpha_fades(spec: ComposeSpec, tmp_path: Path):
+    asset_path = tmp_path / "asset-1.mp4"
+    asset_path.touch()
+    timeline = {
+        "durationMs": 4000,
+        "tracks": [
+            {
+                "id": "t1",
+                "kind": "VIDEO",
+                "index": 0,
+                "muted": False,
+                "locked": False,
+                "clips": [
+                    {
+                        "id": "clipfade1",
+                        "startMs": 0,
+                        "durationMs": 4000,
+                        "inMs": 0,
+                        "outMs": 4000,
+                        "speed": 1.0,
+                        "volume": 1.0,
+                        "opacity": 1.0,
+                        "effectsJson": [{"type": "fade", "params": {"inMs": 300, "outMs": 300}}],
+                        "asset": {"id": "asset-1", "s3Bucket": "uploads", "s3Key": "a.mp4"},
+                    }
+                ],
+            }
+        ],
+    }
+    built = build_command(
+        timeline=timeline,
+        asset_paths={"asset-1": asset_path},
+        voiceover_paths={},
+        caption_srt_path=None,
+        spec=spec,
+    )
+    graph = built.argv[built.argv.index("-filter_complex") + 1]
+    assert "fade=t=in:st=0:d=0.300:alpha=1" in graph
+    assert "fade=t=out:st=3.700:d=0.300:alpha=1" in graph
+
+
+def test_text_animation_and_exit_fade(spec: ComposeSpec, tmp_path: Path):
+    png = tmp_path / "text.png"
+    png.touch()
+    timeline = {
+        "durationMs": 4000,
+        "tracks": [
+            {
+                "id": "t2",
+                "kind": "OVERLAY",
+                "index": 0,
+                "muted": False,
+                "locked": False,
+                "clips": [
+                    {
+                        "id": "textclip1",
+                        "startMs": 500,
+                        "durationMs": 3000,
+                        "inMs": 0,
+                        "outMs": 3000,
+                        "speed": 1.0,
+                        "volume": 1.0,
+                        "opacity": 1.0,
+                        "textJson": {"text": "Hi", "animation": "pop"},
+                        "effectsJson": [{"type": "fade", "params": {"inMs": 0, "outMs": 250}}],
+                    }
+                ],
+            }
+        ],
+    }
+    built = build_command(
+        timeline=timeline,
+        asset_paths={},
+        voiceover_paths={},
+        caption_srt_path=None,
+        spec=spec,
+        text_paths={"textclip1": png},
+    )
+    graph = built.argv[built.argv.index("-filter_complex") + 1]
+    # 'pop' entrance approximated as a fast alpha fade; exit from effectsJson.
+    assert "fade=t=in:st=0:d=0.180:alpha=1" in graph
+    assert "fade=t=out:st=2.750:d=0.250:alpha=1" in graph

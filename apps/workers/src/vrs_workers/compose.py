@@ -308,6 +308,25 @@ def _transform(clip: dict[str, Any]) -> dict[str, Any]:
     return t if isinstance(t, dict) else {}
 
 
+def _fade_effect(clip: dict[str, Any]) -> tuple[float, float]:
+    """Alpha fade-in/out seconds from effectsJson ({type:'fade', params:{inMs,outMs}})."""
+    effects = clip.get("effectsJson")
+    if not isinstance(effects, list):
+        return (0.0, 0.0)
+    for e in effects:
+        if isinstance(e, dict) and e.get("type") == "fade":
+            params = e.get("params") if isinstance(e.get("params"), dict) else {}
+            fade_in = max(0.0, float(params.get("inMs") or 0) / 1000.0)
+            fade_out = max(0.0, float(params.get("outMs") or 0) / 1000.0)
+            return (fade_in, fade_out)
+    return (0.0, 0.0)
+
+
+# textJson.animation → entrance fade seconds ('pop' approximates its scale
+# snap with a fast fade until a scale-animated path exists).
+_TEXT_ANIMATION_FADE = {"fade-in": 0.35, "word-by-word": 0.35, "pop": 0.18}
+
+
 def _video_clip_filter(
     clip: dict[str, Any], src: int, spec: ComposeSpec, out_label: str
 ) -> str:
@@ -324,6 +343,7 @@ def _video_clip_filter(
     speed = clip.get("speed", 1.0) or 1.0
     transform = _transform(clip)
     scale = float(transform.get("scale") or 1.0)
+    fade_in, fade_out = _fade_effect(clip)
 
     parts = [
         f"[{src}:v]trim=start={in_s}:duration={duration_s * speed}",
@@ -339,6 +359,15 @@ def _video_clip_filter(
             f"scale={spec.width}:{spec.height}:force_original_aspect_ratio=increase"
         )
         parts.append(f"crop={spec.width}:{spec.height}")
+    if fade_in > 0 or fade_out > 0:
+        # Alpha fades run on stream-local time (before the slot shift below),
+        # so the clip dips through the canvas at its boundaries.
+        parts.append("format=yuva420p")
+        if fade_in > 0:
+            parts.append(f"fade=t=in:st=0:d={fade_in:.3f}:alpha=1")
+        if fade_out > 0:
+            fade_out_st = max(0.0, duration_s - fade_out)
+            parts.append(f"fade=t=out:st={fade_out_st:.3f}:d={fade_out:.3f}:alpha=1")
     parts.append(f"fps={spec.fps}")
     parts.append(f"setpts=PTS+{start_s}/TB")
     if clip.get("opacity", 1.0) < 1.0:
@@ -350,14 +379,24 @@ def _video_clip_filter(
 def _text_clip_filter(
     clip: dict[str, Any], src: int, spec: ComposeSpec, out_label: str
 ) -> str:
-    """A pre-rendered canvas-sized PNG: normalize format/fps and shift into
-    its timeline slot. Position/size are baked into the image itself."""
+    """A pre-rendered canvas-sized PNG: normalize format/fps, apply entrance/
+    exit fades, and shift into its timeline slot. Position/size are baked
+    into the image itself."""
     start_s = clip["startMs"] / 1000.0
-    parts = [
-        f"[{src}:v]format=rgba",
-        f"fps={spec.fps}",
-        f"setpts=PTS-STARTPTS+{start_s}/TB",
-    ]
+    duration_s = clip["durationMs"] / 1000.0
+    text_json = clip.get("textJson") if isinstance(clip.get("textJson"), dict) else {}
+    entrance = _TEXT_ANIMATION_FADE.get(str(text_json.get("animation") or "none"), 0.0)
+    effect_in, effect_out = _fade_effect(clip)
+    fade_in = max(entrance, effect_in)
+
+    parts = [f"[{src}:v]format=rgba"]
+    if fade_in > 0:
+        parts.append(f"fade=t=in:st=0:d={fade_in:.3f}:alpha=1")
+    if effect_out > 0:
+        fade_out_st = max(0.0, duration_s - effect_out)
+        parts.append(f"fade=t=out:st={fade_out_st:.3f}:d={effect_out:.3f}:alpha=1")
+    parts.append(f"fps={spec.fps}")
+    parts.append(f"setpts=PTS-STARTPTS+{start_s}/TB")
     if clip.get("opacity", 1.0) < 1.0:
         parts.append(f"colorchannelmixer=aa={clip['opacity']:.3f}")
     return ",".join(parts) + f"[{out_label}]"

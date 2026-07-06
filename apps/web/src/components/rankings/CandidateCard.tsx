@@ -27,6 +27,7 @@ import type { ImportState } from './useRankingBuilder';
 import {
   candidateStyles,
   NUMBER_SIZE_OPTIONS,
+  type EntranceAnimation,
   type NumberStyle,
 } from './ranking-layout';
 import { TitleStyleToolbar, TitleStrokeRow } from './TitleStyleToolbar';
@@ -307,6 +308,7 @@ function AttachedBody({
         <TabsList>
           <TabsTrigger value="title">Video Title</TabsTrigger>
           <TabsTrigger value="number">Number Appearance</TabsTrigger>
+          <TabsTrigger value="animation">Animation &amp; Transition</TabsTrigger>
         </TabsList>
         <TabsContent value="title" className="pt-4">
           <VideoTitleTab
@@ -321,6 +323,9 @@ function AttachedBody({
             brandColor={brandColor}
             onPatchDebounced={onPatchDebounced}
           />
+        </TabsContent>
+        <TabsContent value="animation" className="pt-4">
+          <AnimationTab candidate={candidate} onPatchDebounced={onPatchDebounced} />
         </TabsContent>
       </Tabs>
     </div>
@@ -364,6 +369,51 @@ function VideoTitleTab({
         className="w-full rounded-lg bg-surface-muted px-4 py-3 text-lg font-semibold outline-none transition-shadow placeholder:text-muted-foreground/60 focus:ring-2 focus:ring-brand-300"
       />
       <TitleStrokeRow value={titleStyle} onChange={patchStyle} idBase={`${titleId}-stroke`} />
+    </div>
+  );
+}
+
+/** "Animation & Transition" tab: overlay entrance per video. */
+function AnimationTab({
+  candidate,
+  onPatchDebounced,
+}: {
+  candidate: RankingCandidateDetail;
+  onPatchDebounced: (patch: RankingCandidatePatch) => void;
+}) {
+  const idBase = useId();
+  const { animation } = candidateStyles(candidate.metadataJson);
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1.5">
+        <label htmlFor={`${idBase}-entrance`} className="text-xs font-medium text-muted-foreground">
+          Title &amp; number entrance
+        </label>
+        <Select
+          id={`${idBase}-entrance`}
+          aria-label="Overlay entrance animation"
+          value={animation ?? 'default'}
+          onChange={(e) => {
+            const v = e.target.value;
+            onPatchDebounced({
+              metadataJson: {
+                ...candidate.metadataJson,
+                animation: v === 'default' ? undefined : (v as EntranceAnimation),
+              },
+            });
+          }}
+        >
+          <option value="default">Default (title fades, number pops)</option>
+          <option value="fade-in">Fade in</option>
+          <option value="pop">Pop</option>
+          <option value="none">None</option>
+        </Select>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        The transition between videos (crossfade or hard cut) is a ranking-wide setting — find it
+        on the Playback Order card.
+      </p>
     </div>
   );
 }

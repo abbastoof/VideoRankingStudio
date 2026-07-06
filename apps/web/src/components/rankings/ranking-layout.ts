@@ -120,14 +120,23 @@ export function numberXPct(position: NumberStyle['position']): number {
  * Defensive read of per-candidate styles from metadataJson (untyped JSON —
  * older candidates may have nothing, garbage, or partial objects).
  */
+export type EntranceAnimation = 'none' | 'fade-in' | 'pop';
+
 export function candidateStyles(metadataJson: Record<string, unknown> | undefined): {
   titleStyle: typeof DEFAULT_CANDIDATE_TITLE_STYLE;
   numberStyle: NumberStyle;
+  /** Entrance animation for the overlays; null = per-element defaults. */
+  animation: EntranceAnimation | null;
 } {
   const raw = metadataJson ?? {};
+  const animation =
+    raw.animation === 'none' || raw.animation === 'fade-in' || raw.animation === 'pop'
+      ? raw.animation
+      : null;
   const t = (typeof raw.titleStyle === 'object' && raw.titleStyle !== null ? raw.titleStyle : {}) as Record<string, unknown>;
   const n = (typeof raw.numberStyle === 'object' && raw.numberStyle !== null ? raw.numberStyle : {}) as Record<string, unknown>;
   return {
+    animation,
     titleStyle: {
       ...DEFAULT_CANDIDATE_TITLE_STYLE,
       ...(typeof t.fontFamily === 'string' ? { fontFamily: t.fontFamily } : {}),

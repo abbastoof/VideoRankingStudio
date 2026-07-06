@@ -138,6 +138,7 @@ export interface RankingDetail {
   aspectRatio: string;
   order: 'asc' | 'desc';
   orderMode: 'score' | 'custom';
+  transition: 'none' | 'fade';
   headerText: string | null;
   brandColor: string | null;
   reveal: 'countdown' | 'topfirst';
@@ -151,6 +152,7 @@ export interface RankingDetail {
 export interface RankingMetaPatch {
   order?: 'asc' | 'desc';
   orderMode?: 'score' | 'custom';
+  transition?: 'none' | 'fade';
   headerText?: string | null;
   brandColor?: string | null;
   reveal?: 'countdown' | 'topfirst';

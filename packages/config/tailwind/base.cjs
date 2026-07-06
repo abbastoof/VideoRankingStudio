@@ -85,6 +85,10 @@ module.exports = {
       },
       keyframes: {
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'pop-in': {
+          from: { opacity: '0', transform: 'scale(0.85)' },
+          to: { opacity: '1', transform: 'scale(1)' },
+        },
         'slide-up': {
           from: { opacity: '0', transform: 'translateY(8px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
@@ -100,6 +104,8 @@ module.exports = {
       },
       animation: {
         'fade-in': 'fade-in 200ms ease-out',
+        'fade-in-slow': 'fade-in 350ms ease-out',
+        'pop-in': 'pop-in 180ms ease-out',
         'slide-up': 'slide-up 200ms ease-out',
         'pulse-subtle': 'pulse-subtle 2s ease-in-out infinite',
         shimmer: 'shimmer 1.6s linear infinite',
