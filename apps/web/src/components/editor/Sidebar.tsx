@@ -361,47 +361,36 @@ function CaptionsPanel({ projectId }: { projectId: string }) {
   );
 }
 
-const STOCK_VOICES = [
-  { id: 'stock-narrator-male-us', label: 'Atlas — US, male' },
-  { id: 'stock-narrator-female-us', label: 'Nova — US, female' },
-  { id: 'stock-narrator-male-uk', label: 'Wells — UK, male' },
-  { id: 'stock-narrator-female-uk', label: 'Harper — UK, female' },
-  { id: 'stock-newsreader-neutral', label: 'Field — neutral' },
-];
-
 function VoicePanel({ projectId }: { projectId: string }) {
   const [script, setScript] = useState('');
-  const [voiceKey, setVoiceKey] = useState(STOCK_VOICES[0]!.id);
+  const [voiceId, setVoiceId] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [voiceIds, setVoiceIds] = useState<Record<string, string>>({});
+  const [voices, setVoices] = useState<Array<{ id: string; name: string }>>([]);
 
-  // Voice DB rows are indexed by (provider, providerVoiceId). We resolve the
-  // internal Voice.id by looking through the seeded list once.
+  // Real voices from the API — the old hardcoded list mapped through a field
+  // the voices endpoint never returned, so generation always fell back to
+  // sending a provider key the API can't resolve.
   useEffect(() => {
-    void fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/voices`, { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : { items: [] }))
-      .then((data: { items?: Array<{ id: string; providerVoiceId?: string }> }) => {
-        const map: Record<string, string> = {};
-        for (const v of data.items ?? []) {
-          if (v.providerVoiceId) map[v.providerVoiceId] = v.id;
-        }
-        setVoiceIds(map);
+    clientSdk()
+      .listVoices()
+      .then((data) => {
+        const ready = data.items
+          .filter((v) => v.status === 'READY')
+          .map((v) => ({ id: v.id, name: v.name }));
+        setVoices(ready);
+        setVoiceId((current) => current || ready[0]?.id || '');
       })
       .catch(() => undefined);
   }, []);
 
   async function run() {
-    if (!script) return;
+    if (!script || !voiceId) return;
     setBusy(true);
     setErr(null);
     try {
-      const voiceId = voiceIds[voiceKey];
-      if (!voiceId) {
-        // Fall back to sending the provider id — the API resolves either.
-      }
       const res = await clientSdk().generateVoiceover(projectId, {
-        voiceId: voiceId ?? voiceKey,
+        voiceId,
         scriptText: script,
         speed: 1.0,
         pitch: 0,
@@ -427,13 +416,14 @@ function VoicePanel({ projectId }: { projectId: string }) {
             <h3 className="text-sm font-semibold">Voiceover</h3>
           </div>
           <select
-            value={voiceKey}
-            onChange={(e) => setVoiceKey(e.target.value)}
+            value={voiceId}
+            onChange={(e) => setVoiceId(e.target.value)}
+            disabled={voices.length === 0}
             className="w-full h-9 rounded-md border border-border bg-surface-raised px-3 text-sm"
           >
-            {STOCK_VOICES.map((v) => (
+            {voices.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.label}
+                {v.name}
               </option>
             ))}
           </select>
@@ -445,7 +435,7 @@ function VoicePanel({ projectId }: { projectId: string }) {
             className="w-full rounded-md border border-border bg-surface-raised p-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
           />
           <p className="text-xs text-muted-foreground">{script.length} characters</p>
-          <Button size="sm" fullWidth disabled={!script} loading={busy} onClick={run}>
+          <Button size="sm" fullWidth disabled={!script || !voiceId} loading={busy} onClick={run}>
             Generate voiceover
           </Button>
           {err ? <p className="text-xs text-danger">{err}</p> : null}

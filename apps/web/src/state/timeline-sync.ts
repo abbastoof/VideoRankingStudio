@@ -9,6 +9,7 @@
  * live in the store; we're only responsible for durability.
  */
 
+import { API_URL } from '@/lib/api';
 import { clientSdk } from '@/lib/client-sdk';
 
 import { useEditorStore, type EditorClip, type EditorTrack } from './editor-store';
@@ -78,7 +79,7 @@ async function flush(projectId: string) {
 
     const diffs = diffTracks(prev.tracks, next.tracks);
     for (const t of diffs.tracksAdded) {
-      const created = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/projects/${projectId}/tracks`, {
+      const created = await fetch(`${API_URL}/v1/projects/${projectId}/tracks`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -91,7 +92,7 @@ async function flush(projectId: string) {
       }));
     }
     for (const t of diffs.tracksUpdated) {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/projects/${projectId}/tracks/${t.id}`, {
+      await fetch(`${API_URL}/v1/projects/${projectId}/tracks/${t.id}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -99,7 +100,7 @@ async function flush(projectId: string) {
       });
     }
     for (const t of diffs.tracksRemoved) {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/projects/${projectId}/tracks/${t.id}`, {
+      await fetch(`${API_URL}/v1/projects/${projectId}/tracks/${t.id}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -107,7 +108,7 @@ async function flush(projectId: string) {
 
     // Clips: persist create/update/delete against the *current* track ids.
     for (const c of diffs.clipsCreated) {
-      const created = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/projects/${projectId}/clips`, {
+      const created = await fetch(`${API_URL}/v1/projects/${projectId}/clips`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -117,7 +118,7 @@ async function flush(projectId: string) {
       useEditorStore.getState().replaceClip({ ...c.clip, id: created.id });
     }
     for (const c of diffs.clipsUpdated) {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/projects/${projectId}/clips/${c.clip.id}`, {
+      await fetch(`${API_URL}/v1/projects/${projectId}/clips/${c.clip.id}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -125,7 +126,7 @@ async function flush(projectId: string) {
       });
     }
     for (const c of diffs.clipsRemoved) {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/projects/${projectId}/clips/${c.id}`, {
+      await fetch(`${API_URL}/v1/projects/${projectId}/clips/${c.id}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -133,7 +134,7 @@ async function flush(projectId: string) {
 
     // Reorder pass — a single batched request captures cross-track moves.
     if (diffs.reordered.length > 0) {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/projects/${projectId}/clips/reorder`, {
+      await fetch(`${API_URL}/v1/projects/${projectId}/clips/reorder`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

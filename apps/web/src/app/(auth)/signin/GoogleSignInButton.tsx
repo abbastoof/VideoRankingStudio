@@ -4,6 +4,8 @@ import { useState } from 'react';
 
 import { Button } from '@vrs/ui';
 
+import { API_URL } from '@/lib/api';
+
 export function GoogleSignInButton() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -12,7 +14,9 @@ export function GoogleSignInButton() {
     setBusy(true);
     setErr(null);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/v1/auth/google/authorize`, {
+      // API_URL carries the localhost fallback — a bare NEXT_PUBLIC_API_URL
+      // is undefined when unset and produced literal "/undefined/..." URLs.
+      const res = await fetch(`${API_URL}/v1/auth/google/authorize`, {
         credentials: 'include',
       });
       if (!res.ok) {
